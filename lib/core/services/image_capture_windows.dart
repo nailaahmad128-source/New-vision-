@@ -1,15 +1,14 @@
 import 'package:file_picker/file_picker.dart';
 
 Future<List<String>> pickImagesFromGallery() async {
-  final result = await FilePicker.platform.pickFiles(
+  final files = await FilePicker.pickFiles(
     type: FileType.image,
-    allowMultiple: true,
   );
-  return result?.files
-          .where((file) => file.path != null)
-          .map((file) => file.path!)
-          .toList() ??
-      const <String>[];
+
+  return files
+      .where((file) => file.path != null)
+      .map((file) => file.path!)
+      .toList();
 }
 
 Future<String?> pickImageFromCamera() async {
