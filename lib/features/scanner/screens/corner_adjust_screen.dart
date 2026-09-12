@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -47,8 +48,10 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
 
   Future<void> _readImageSize() async {
     try {
-      final bytes = await File(widget.imagePath).readAsBytes();
-      final size = await _decodeSize(bytes);
+      final Uint8List bytes =
+          await File(widget.imagePath).readAsBytes();
+
+      final size = _decodeSize(bytes);
 
       if (mounted) {
         setState(() => _imageSize = size);
@@ -56,7 +59,7 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
     } catch (_) {}
   }
 
-  Future<Size> _decodeSize(List<int> bytes) async {
+  Size _decodeSize(Uint8List bytes) {
     final decoded = img.decodeImage(bytes);
 
     if (decoded == null) {
@@ -106,54 +109,6 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
     }
   }
 
-  void _movePoint(int index, Offset point) {
-    final next = List<Offset>.from(_points);
-
-    next[index] = Offset(
-      point.dx.clamp(0.0, 1.0),
-      point.dy.clamp(0.0, 1.0),
-    );
-
-    setState(() => _points = next);
-  }
-
-  Rect _containRect(Size viewport, Size image) {
-    if (image.width <= 1 || image.height <= 1) {
-      final side = math.min(viewport.width, viewport.height);
-
-      return Rect.fromCenter(
-        center: viewport.center,
-        width: side,
-        height: side,
-      );
-    }
-
-    final fitted = applyBoxFit(
-      BoxFit.contain,
-      image,
-      viewport,
-    );
-
-    return Alignment.center.inscribe(
-      fitted.destination,
-      Offset.zero & viewport,
-    );
-  }
-
-  Offset _toCanvas(Offset normalized, Rect rect) {
-    return Offset(
-      rect.left + normalized.dx * rect.width,
-      rect.top + normalized.dy * rect.height,
-    );
-  }
-
-  Offset _fromCanvas(Offset canvas, Rect rect) {
-    return Offset(
-      (canvas.dx - rect.left) / rect.width,
-      (canvas.dy - rect.top) / rect.height,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -188,6 +143,7 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
                     Positioned.fill(
                       child: Container(color: Colors.black),
                     ),
+
                     Positioned.fromRect(
                       rect: rect,
                       child: Image.file(
@@ -195,23 +151,26 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
                         fit: BoxFit.fill,
                       ),
                     ),
+
                     Positioned.fromRect(
                       rect: rect,
                       child: CustomPaint(
                         painter: _CornerPainter(_points),
                       ),
                     ),
+
                     for (var i = 0; i < 4; i++)
                       _Handle(
                         point: _toCanvas(_points[i], rect),
-                        onDrag: (delta) {
-                          final canvasPoint =
-                              _toCanvas(_points[i], rect) + delta;
+                        onPanUpdate: (DragUpdateDetails details) {
+                          final Offset canvasPoint =
+                              _toCanvas(_points[i], rect) +
+                                  details.delta;
 
-                          _movePoint(
-                            i,
-                            _fromCanvas(canvasPoint, rect),
-                          );
+                          final Offset imagePoint =
+                              _fromCanvas(canvasPoint, rect);
+
+                          _movePoint(i, imagePoint);
                         },
                       ),
                   ],
@@ -219,15 +178,12 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
               },
             ),
           ),
+
           SafeArea(
             top: false,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(
-                18,
-                12,
-                18,
-                14,
-              ),
+              padding:
+                  const EdgeInsets.fromLTRB(18, 12, 18, 14),
               color: Colors.black,
               child: const Text(
                 'Drag each corner onto the exact document edge. '
@@ -245,15 +201,67 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
       ),
     );
   }
+
+  void _movePoint(int index, Offset point) {
+    final next = List<Offset>.from(_points);
+
+    next[index] = Offset(
+      point.dx.clamp(0.0, 1.0),
+      point.dy.clamp(0.0, 1.0),
+    );
+
+    setState(() => _points = next);
+  }
+
+  Rect _containRect(Size viewport, Size image) {
+    if (image.width <= 1 || image.height <= 1) {
+      final side =
+          math.min(viewport.width, viewport.height);
+
+      return Rect.fromCenter(
+        center: viewport.center,
+        width: side,
+        height: side,
+      );
+    }
+
+    final fitted =
+        applyBoxFit(BoxFit.contain, image, viewport);
+
+    return Alignment.center.inscribe(
+      fitted.destination,
+      Offset.zero & viewport,
+    );
+  }
+
+  Offset _toCanvas(
+    Offset normalized,
+    Rect rect,
+  ) {
+    return Offset(
+      rect.left + normalized.dx * rect.width,
+      rect.top + normalized.dy * rect.height,
+    );
+  }
+
+  Offset _fromCanvas(
+    Offset canvas,
+    Rect rect,
+  ) {
+    return Offset(
+      (canvas.dx - rect.left) / rect.width,
+      (canvas.dy - rect.top) / rect.height,
+    );
+  }
 }
 
 class _Handle extends StatelessWidget {
   final Offset point;
-  final ValueChanged<Offset> onDrag;
+  final void Function(DragUpdateDetails) onPanUpdate;
 
   const _Handle({
     required this.point,
-    required this.onDrag,
+    required this.onPanUpdate,
   });
 
   @override
@@ -262,9 +270,7 @@ class _Handle extends StatelessWidget {
       left: point.dx - 18,
       top: point.dy - 18,
       child: GestureDetector(
-        onPanUpdate: (details) {
-          onDrag(details.delta);
-        },
+        onPanUpdate: onPanUpdate,
         child: Container(
           width: 36,
           height: 36,
@@ -326,7 +332,10 @@ class _CornerPainter extends CustomPainter {
       ..moveTo(mapped[0].dx, mapped[0].dy);
 
     for (var i = 1; i < mapped.length; i++) {
-      outline.lineTo(mapped[i].dx, mapped[i].dy);
+      outline.lineTo(
+        mapped[i].dx,
+        mapped[i].dy,
+      );
     }
 
     outline.close();
@@ -335,7 +344,9 @@ class _CornerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _CornerPainter oldDelegate) {
+  bool shouldRepaint(
+    covariant _CornerPainter oldDelegate,
+  ) {
     return oldDelegate.points != points;
   }
 }
