@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,7 +9,7 @@ import 'package:image/image.dart' as img;
 
 class CornerAdjustScreen extends StatefulWidget {
   final String imagePath;
-  final List<Offset>? initialCorners;
+  final List<ui.Offset>? initialCorners;
 
   const CornerAdjustScreen({
     super.key,
@@ -24,11 +25,11 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
   static const _channel =
       MethodChannel('com.hameed.pdfmastertools/scanner');
 
-  List<Offset> _points = const [
-    Offset(.08, .08),
-    Offset(.92, .08),
-    Offset(.92, .92),
-    Offset(.08, .92),
+  List<ui.Offset> _points = const [
+    ui.Offset(.08, .08),
+    ui.Offset(.92, .08),
+    ui.Offset(.92, .92),
+    ui.Offset(.08, .92),
   ];
 
   Size _imageSize = Size.zero;
@@ -40,7 +41,7 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
 
     final points = widget.initialCorners;
     if (points != null && points.length == 4) {
-      _points = List<Offset>.from(points);
+      _points = List<ui.Offset>.from(points);
     }
 
     _readImageSize();
@@ -161,18 +162,18 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
 
                     for (var i = 0; i < 4; i++)
                       _Handle(
-                        point: Offset(
+                        point: ui.Offset(
                           rect.left + _points[i].dx * rect.width,
                           rect.top + _points[i].dy * rect.height,
                         ),
                         onPanUpdate: (DragUpdateDetails details) {
-                          final Offset canvasPoint = Offset(
+                          final ui.Offset canvasPoint = ui.Offset(
                             rect.left + _points[i].dx * rect.width,
                             rect.top + _points[i].dy * rect.height,
                           ) +
                               details.delta;
 
-                          final Offset imagePoint =
+                          final ui.Offset imagePoint =
                               _fromCanvas(canvasPoint, rect);
 
                           _movePoint(i, imagePoint);
@@ -207,10 +208,10 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
     );
   }
 
-  void _movePoint(int index, Offset point) {
-    final next = List<Offset>.from(_points);
+  void _movePoint(int index, ui.Offset point) {
+    final next = List<ui.Offset>.from(_points);
 
-    next[index] = Offset(
+    next[index] = ui.Offset(
       point.dx.clamp(0.0, 1.0),
       point.dy.clamp(0.0, 1.0),
     );
@@ -235,15 +236,15 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
 
     return Alignment.center.inscribe(
       fitted.destination,
-      Offset.zero & viewport,
+      ui.Offset.zero & viewport,
     );
   }
 
-  Offset _fromCanvas(
-    Offset canvas,
+  ui.Offset _fromCanvas(
+    ui.Offset canvas,
     Rect rect,
   ) {
-    return Offset(
+    return ui.Offset(
       (canvas.dx - rect.left) / rect.width,
       (canvas.dy - rect.top) / rect.height,
     );
@@ -251,7 +252,7 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
 }
 
 class _Handle extends StatelessWidget {
-  final Offset point;
+  final ui.Offset point;
   final void Function(DragUpdateDetails) onPanUpdate;
 
   const _Handle({
@@ -289,7 +290,7 @@ class _Handle extends StatelessWidget {
 }
 
 class _CornerPainter extends CustomPainter {
-  final List<Offset> points;
+  final List<ui.Offset> points;
 
   const _CornerPainter(this.points);
 
@@ -301,7 +302,7 @@ class _CornerPainter extends CustomPainter {
 
     final mapped = points
         .map(
-          (p) => Offset(
+          (p) => ui.Offset(
             p.dx * size.width,
             p.dy * size.height,
           ),
@@ -312,7 +313,7 @@ class _CornerPainter extends CustomPainter {
       ..color = Colors.black.withValues(alpha: .30);
 
     final path = Path()
-      ..addRect(Offset.zero & size)
+      ..addRect(ui.Offset.zero & size)
       ..addPolygon(mapped, true)
       ..fillType = PathFillType.evenOdd;
 
