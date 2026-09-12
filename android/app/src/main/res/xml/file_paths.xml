@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Mirrors FileStorageService's <app documents>/pdfmaster/ layout so
+         every file the app shares (library, trash-recovery edge cases,
+         tmp exports) is reachable through the provider. -->
+    <files-path name="app_documents" path="." />
+    <cache-path name="app_cache" path="." />
+    <external-files-path name="external_files" path="." />
+    <external-cache-path name="external_cache" path="." />
+</paths>

@@ -1,0 +1,30 @@
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+.pub-cache/
+.pub/
+*.iml
+
+# Android
+android/local.properties
+android/key.properties
+android/**/*.jks
+android/**/*.keystore
+android/.gradle/
+android/app/release/
+android/gradlew.log
+*.hprof
+
+# Never commit real AdMob credentials or the release keystore.
+android/app/google-services.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# macOS
+.DS_Store

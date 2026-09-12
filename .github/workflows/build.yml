@@ -1,0 +1,129 @@
+name: Build Android
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      build_release:
+        description: "Also build a release APK + AAB"
+        type: boolean
+        default: true
+
+env:
+  FLUTTER_CHANNEL: stable
+
+jobs:
+  build:
+    name: Analyze & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Patch legacy Tesseract plugin
+        run: |
+          TESS_DIR="$HOME/.pub-cache/hosted/pub.dev/flutter_tesseract_ocr-0.4.31/android"
+          test -f "$TESS_DIR/build.gradle" || exit 1
+          sed -i "s/jcenter()/mavenCentral()/g" "$TESS_DIR/build.gradle"
+          echo "Tesseract Gradle patch applied."
+      - name: Verify dependency lockfile
+        run: test -s pubspec.lock
+
+      - name: Static analysis
+        run: flutter analyze --no-fatal-infos
+
+      - name: Ensure Gradle wrapper jar
+        run: |
+          cd android
+          if [ ! -s gradle/wrapper/gradle-wrapper.jar ]; then
+            curl -sSL -o gradle/wrapper/gradle-wrapper.jar \
+              "https://raw.githubusercontent.com/gradle/gradle/v9.1.0/gradle/wrapper/gradle-wrapper.jar"
+          fi
+
+      - name: Debug APK build
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_release != 'true'
+        run: flutter build apk --debug
+
+      - name: Decode release keystore
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_release == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "ERROR: KEYSTORE_BASE64 secret is missing."
+            exit 1
+          fi
+
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.jks
+
+          cat > android/key.properties <<EOF2
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=release.jks
+          EOF2
+
+      - name: Build release APK
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_release == 'true'
+        run: |
+          flutter build apk --release \
+            --dart-define=ADMOB_BANNER_UNIT_ID="${{ secrets.ADMOB_BANNER_UNIT_ID }}" \
+            --dart-define=ADMOB_INTERSTITIAL_UNIT_ID="${{ secrets.ADMOB_INTERSTITIAL_UNIT_ID }}" \
+            --dart-define=PRIVACY_POLICY_URL="${{ secrets.PRIVACY_POLICY_URL }}" \
+            --dart-define=SYNCFUSION_LICENSE_KEY="${{ secrets.SYNCFUSION_LICENSE_KEY }}"
+
+      - name: Build release AAB
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_release == 'true'
+        run: |
+          flutter build appbundle --release \
+            --dart-define=ADMOB_BANNER_UNIT_ID="${{ secrets.ADMOB_BANNER_UNIT_ID }}" \
+            --dart-define=ADMOB_INTERSTITIAL_UNIT_ID="${{ secrets.ADMOB_INTERSTITIAL_UNIT_ID }}" \
+            --dart-define=PRIVACY_POLICY_URL="${{ secrets.PRIVACY_POLICY_URL }}" \
+            --dart-define=SYNCFUSION_LICENSE_KEY="${{ secrets.SYNCFUSION_LICENSE_KEY }}"
+
+      - name: Upload debug APK
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_release != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-master-tools-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload release APK
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-master-tools-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Upload release AAB
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-master-tools-release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error

@@ -1,0 +1,90 @@
+name: pdf_master_tools
+description: "PDF Master Tools - Professional PDF toolkit"
+publish_to: 'none'
+version: 2.0.0+12
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: ">=3.38.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # State management
+  provider: ^6.1.2
+
+  # Local storage (metadata: library entries, tool history, trash records)
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # PDF engine: merge / split / reorder / rotate / security / fill forms
+  syncfusion_flutter_pdf: ^34.1.33
+  # PDF viewer for the reader screen
+  syncfusion_flutter_pdfviewer: ^34.1.33
+  # Explicit dependency (not just transitive) since main.dart calls
+  # SyncfusionLicense.registerLicense() directly — see AppConfig.
+  syncfusion_flutter_core: ^34.1.33
+  # Rasterizing PDF pages <-> images (PDF to Image, thumbnails, compression re-encode)
+  printing: ^5.13.1
+  pdf: ^3.11.1
+
+  # Image handling
+  image: ^4.2.0
+  image_picker: ^1.1.2
+  camera: ^0.11.0+2
+
+  # File selection / IO
+  file_picker: ^12.2.0
+  share_plus: ^13.3.0
+  open_filex: ^4.5.0
+
+  # Signature capture for Fill & Sign
+  signature: ^5.5.0
+
+  # QR
+  mobile_scanner: ^6.0.2
+  qr_flutter: ^4.1.0
+
+  # Swipe-to-share/favorite/delete actions on Library document tiles
+  flutter_slidable: ^3.1.1
+
+  # Links
+  url_launcher: ^6.3.1
+
+  # Utility collection helpers (firstOrNull, etc.)
+  collection: ^1.19.0
+
+  # App version info for Settings
+  package_info_plus: ^10.2.1
+
+  # OCR
+  google_mlkit_text_recognition: ^0.15.0
+  # Tesseract fallback for Arabic/Urdu and mixed-script OCR
+  flutter_tesseract_ocr: ^0.4.31
+
+  # On-device translation + language detection
+  google_mlkit_translation: ^0.13.0
+  google_mlkit_language_id: ^0.13.0
+
+  # Text to speech
+  flutter_tts: ^4.2.5
+
+  # Ads
+  google_mobile_ads: ^9.0.0
+
+  # Utilities
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/
