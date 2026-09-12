@@ -79,14 +79,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+      allowMultiple: true,
     );
-    if (result.isEmpty || !mounted) return;
+    if (result == null || !mounted) return;
 
     final storage = context.read<FileStorageService>();
     final data = context.read<AppDataController>();
     var imported = 0;
 
-    for (final f in result) {
+    for (final f in result.files) {
       final sourcePath = f.path;
       if (sourcePath == null) continue;
       final source = File(sourcePath);

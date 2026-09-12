@@ -40,7 +40,7 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
   }
 
   Future<Size> _decodeSize(List<int> bytes) async {
-    final decoded = img.decodeImage(Uint8List.fromList(bytes));
+    final decoded = img.decodeImage(bytes);
     if (decoded == null) return const Size(1, 1);
     return Size(decoded.width.toDouble(), decoded.height.toDouble());
   }
@@ -92,10 +92,7 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
                     for (var i = 0; i < 4; i++)
                       _Handle(
                         point: _toCanvas(_points[i], rect),
-                        onDrag: (delta) {
-      final canvasPoint = _toCanvas(_points[i], rect) + delta;
-      _movePoint(i, _fromCanvas(canvasPoint, rect));
-    },
+                        onDrag: (local) => _movePoint(i, _fromCanvas(local, rect)),
                       ),
                   ],
                 );

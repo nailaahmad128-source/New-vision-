@@ -6,7 +6,6 @@ import 'package:path/path.dart' as p;
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/storage/app_data_controller.dart';
@@ -74,7 +73,7 @@ class DocumentDetailScreen extends StatelessWidget {
             final document = pw.Document();
             document.addPage(
               pw.Page(
-                pageFormat: PdfPageFormat.a4,
+                pageFormat: pw.PdfPageFormat.a4,
                 margin: const pw.EdgeInsets.all(24),
                 build: (_) => pw.Center(child: pw.Image(image, fit: pw.BoxFit.contain)),
               ),
