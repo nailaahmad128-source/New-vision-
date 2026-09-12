@@ -18,8 +18,6 @@ class AppTheme {
       ),
       scaffoldBackgroundColor: AppColors.lightBg,
       fontFamily: 'Roboto',
-      visualDensity: VisualDensity.adaptivePlatformDensity,
-      splashFactory: InkSparkle.splashFactory,
     );
     return base.copyWith(
       textTheme: _textTheme(base.textTheme, AppColors.lightTextPrimary,
@@ -40,7 +38,7 @@ class AppTheme {
         color: AppColors.lightSurface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           side: const BorderSide(color: AppColors.lightBorder),
         ),
         margin: EdgeInsets.zero,
@@ -71,7 +69,7 @@ class AppTheme {
           backgroundColor: AppColors.brandPrimary,
           foregroundColor: Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
         ),
@@ -108,8 +106,6 @@ class AppTheme {
       ),
       scaffoldBackgroundColor: AppColors.darkBg,
       fontFamily: 'Roboto',
-      visualDensity: VisualDensity.adaptivePlatformDensity,
-      splashFactory: InkSparkle.splashFactory,
     );
     return base.copyWith(
       textTheme: _textTheme(base.textTheme, AppColors.darkTextPrimary,
@@ -130,7 +126,7 @@ class AppTheme {
         color: AppColors.darkSurface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           side: const BorderSide(color: AppColors.darkBorder),
         ),
         margin: EdgeInsets.zero,
@@ -161,7 +157,7 @@ class AppTheme {
           backgroundColor: AppColors.brandPrimaryDark,
           foregroundColor: Colors.black,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
         ),

@@ -40,12 +40,9 @@ class _TextExtractionScreenState extends State<TextExtractionScreen> {
   @override void initState() {
     super.initState();
     final saved = context.read<AppDataController>().defaultOcrLanguage;
-    _language = _languages.containsKey(saved) ? saved : 'auto';
-    _controller.addListener(_onTextChanged);
+    _language = saved;
     _extract();
   }
-
-  void _onTextChanged() => setState(() {});
 
   Future<void> _saveSearchText() async {
     final id = widget.documentId;
@@ -89,146 +86,34 @@ class _TextExtractionScreenState extends State<TextExtractionScreen> {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Text saved to Library')));
   }
 
-  @override void dispose() { _cancelToken?.cancel(); _controller.removeListener(_onTextChanged); _tts.stop(); _controller.dispose(); _ocr.dispose(); super.dispose(); }
+  @override void dispose() { _tts.stop(); _controller.dispose(); _ocr.dispose(); super.dispose(); }
 
   @override Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final hasText = _controller.text.trim().isNotEmpty;
-    final isPdf = widget.imagePath.toLowerCase().endsWith('.pdf');
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Extract Text'),
-        actions: [
-          IconButton(
-            tooltip: 'Copy text',
-            onPressed: hasText ? () => Clipboard.setData(ClipboardData(text: _controller.text)) : null,
-            icon: const Icon(Icons.copy_rounded),
-          ),
-          IconButton(
-            tooltip: 'Run OCR again',
-            onPressed: _loading ? null : _extract,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: scheme.outlineVariant),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 46, height: 46,
-                  decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(14)),
-                  child: Icon(isPdf ? Icons.picture_as_pdf_rounded : Icons.document_scanner_rounded, color: scheme.onPrimaryContainer),
-                ),
-                const SizedBox(width: 12),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(isPdf ? 'PDF text extraction' : 'Image text extraction', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 3),
-                  Text(isPdf ? 'OCR will process the document pages.' : 'Extract editable text from this scan.', style: theme.textTheme.bodySmall),
-                ])),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(children: [
-              Expanded(child: DropdownButtonFormField<String>(
-                value: _language,
-                decoration: const InputDecoration(labelText: 'OCR language', prefixIcon: Icon(Icons.language_rounded)),
-                items: _languages.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis))).toList(),
-                onChanged: _loading ? null : (v) { if (v != null) { setState(() => _language = v); context.read<AppDataController>().setDefaultOcrLanguage(v); } },
-              )),
-            ]),
-          ),
+      appBar: AppBar(title: const Text('Extract Text'), actions: [IconButton(tooltip: 'Copy', onPressed: _controller.text.trim().isEmpty ? null : () => Clipboard.setData(ClipboardData(text: _controller.text)), icon: const Icon(Icons.copy_rounded))]),
+      body: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(children: [
+          Row(children: [
+            const Icon(Icons.translate_rounded), const SizedBox(width: 10),
+            Expanded(child: DropdownButtonFormField<String>(value: _language, decoration: const InputDecoration(labelText: 'OCR language', border: OutlineInputBorder()), items: _languages.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(), onChanged: _loading ? null : (v) { if (v != null) { setState(() => _language = v); context.read<AppDataController>().setDefaultOcrLanguage(v); } })),
+            const SizedBox(width: 8),
+            IconButton.filled(onPressed: _loading ? null : _extract, icon: const Icon(Icons.refresh_rounded)),
+          ]),
           const SizedBox(height: 12),
-          if (_loading)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: LinearProgressIndicator(value: _total > 1 ? (_progress / _total).clamp(0.0, 1.0) : null, borderRadius: BorderRadius.circular(8)),
-            ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: _loading
-                  ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.document_scanner_rounded, size: 58, color: scheme.primary),
-                      const SizedBox(height: 14),
-                      Text(isPdf && _total > 1 ? 'Processing page $_progress of $_total…' : 'Extracting text…', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 6),
-                      Text('Keep this screen open while OCR is running.', style: theme.textTheme.bodySmall),
-                      const SizedBox(height: 16),
-                      TextButton.icon(onPressed: () => _cancelToken?.cancel(), icon: const Icon(Icons.close_rounded), label: const Text('Cancel')),
-                    ]))
-                  : _error != null
-                      ? _ErrorCard(message: _error!, onRetry: _extract)
-                      : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                          Expanded(child: Container(
-                            decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(20), border: Border.all(color: scheme.outlineVariant)),
-                            child: TextField(
-                              controller: _controller,
-                              expands: true, maxLines: null, minLines: null,
-                              textAlignVertical: TextAlignVertical.top,
-                              decoration: const InputDecoration(hintText: 'Extracted text will appear here…', border: InputBorder.none, contentPadding: EdgeInsets.all(18)),
-                            ),
-                          )),
-                          const SizedBox(height: 10),
-                          if (hasText) Text('${_controller.text.trim().length} characters', style: theme.textTheme.bodySmall, textAlign: TextAlign.right),
-                        ]),
-            ),
-          ),
-          if (!_loading && _error == null)
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-                child: Column(children: [
-                  Row(children: [
-                    Expanded(child: OutlinedButton.icon(onPressed: hasText ? _saveAsText : null, icon: const Icon(Icons.save_alt_rounded), label: const Text('Save'))),
-                    const SizedBox(width: 8),
-                    Expanded(child: OutlinedButton.icon(onPressed: hasText ? _shareText : null, icon: const Icon(Icons.share_rounded), label: const Text('Share'))),
-                    const SizedBox(width: 8),
-                    Expanded(child: OutlinedButton.icon(onPressed: hasText ? _listen : null, icon: const Icon(Icons.volume_up_rounded), label: const Text('Listen'))),
-                  ]),
-                  const SizedBox(height: 8),
-                  SizedBox(width: double.infinity, child: FilledButton.icon(
-                    onPressed: hasText ? () async { await _saveSearchText(); if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => TranslationScreen(initialText: _controller.text))); } : null,
-                    icon: const Icon(Icons.translate_rounded), label: const Text('Translate extracted text'),
-                  )),
-                ]),
-              ),
-            ),
-        ],
+          ClipRRect(borderRadius: BorderRadius.circular(18), child: widget.imagePath.toLowerCase().endsWith('.pdf') ? Container(height: 150, width: double.infinity, color: Theme.of(context).colorScheme.surfaceContainerHighest, child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.picture_as_pdf_rounded, size: 52, color: Theme.of(context).colorScheme.primary), const SizedBox(height: 6), const Text('All PDF pages will be processed')])) : Image.file(File(widget.imagePath), height: 150, width: double.infinity, fit: BoxFit.contain)),
+          const SizedBox(height: 12),
+          Expanded(child: _loading ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const CircularProgressIndicator(), const SizedBox(height: 12), Text(widget.imagePath.toLowerCase().endsWith('.pdf') ? 'Processing page $_progress of $_total…' : 'Extracting text…'), const SizedBox(height: 12), TextButton.icon(onPressed: () => _cancelToken?.cancel(), icon: const Icon(Icons.close_rounded), label: const Text('Cancel'))])) : _error != null ? Center(child: Text(_error!, textAlign: TextAlign.center)) : TextField(controller: _controller, expands: true, maxLines: null, minLines: null, textAlignVertical: TextAlignVertical.top, decoration: InputDecoration(hintText: 'Extracted text will appear here…', border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)), filled: true))),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(child: OutlinedButton.icon(onPressed: _loading || _controller.text.trim().isEmpty ? null : _saveAsText, icon: const Icon(Icons.save_alt_rounded), label: const Text('Save'))),
+            const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _loading || _controller.text.trim().isEmpty ? null : _shareText, icon: const Icon(Icons.share_rounded), label: const Text('Share'))),
+            const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _loading || _controller.text.trim().isEmpty ? null : _listen, icon: const Icon(Icons.volume_up_rounded), label: const Text('Listen'))),
+          ]),
+          const SizedBox(height: 10),
+          SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _loading || _controller.text.trim().isEmpty ? null : () async { await _saveSearchText(); if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => TranslationScreen(initialText: _controller.text))); }, icon: const Icon(Icons.translate_rounded), label: const Text('Translate extracted text'))),
+        ]),
       ),
     );
-  }
-}
-
-class _ErrorCard extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _ErrorCard({required this.message, required this.onRetry});
-  @override Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(child: Card(
-      child: Padding(padding: const EdgeInsets.all(22), child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.error_outline_rounded, size: 52, color: scheme.error),
-        const SizedBox(height: 12),
-        Text('OCR could not finish', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-        Text(message, textAlign: TextAlign.center),
-        const SizedBox(height: 16),
-        FilledButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh_rounded), label: const Text('Try again')),
-      ])),
-    ));
   }
 }

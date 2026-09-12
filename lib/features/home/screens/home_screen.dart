@@ -7,6 +7,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/banner_ad_slot.dart';
 import '../../tools/screens/tool_router.dart';
 import '../../library/screens/library_screen.dart';
+import '../../qr/screens/qr_scan_screen.dart';
+import '../../qr/screens/qr_generate_screen.dart';
 import '../../scanner/screens/smart_scanner_screen.dart';
 import '../../translation/screens/translation_screen.dart';
 import '../../tools/screens/tools_screen.dart';
@@ -85,48 +87,15 @@ class HomeScreen extends StatelessWidget {
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(18, 20, 18, 0),
                   sliver: SliverToBoxAdapter(
-                    child: Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: AppColors.heroGradient),
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Scan a document', style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
-                                const SizedBox(height: 5),
-                                Text('Capture, enhance and save a professional PDF in seconds.', style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: .88))),
-                                const SizedBox(height: 14),
-                                FilledButton.icon(
-                                  style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: AppColors.brandPrimary),
-                                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmartScannerScreen())),
-                                  icon: const Icon(Icons.document_scanner_rounded),
-                                  label: const Text('Start scanning'),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 54),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(18, 24, 18, 0),
-                  sliver: SliverToBoxAdapter(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Quick actions', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                        Text('Create & Scan', style: theme.textTheme.titleMedium),
                         TextButton(
-                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ToolsScreen())),
-                          child: const Text('All tools'),
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => const SmartScannerScreen(),
+                          )),
+                          child: const Text('Scan now'),
                         ),
                       ],
                     ),
@@ -134,11 +103,8 @@ class HomeScreen extends StatelessWidget {
                 ),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-                  sliver: SliverLayoutBuilder(
-                    builder: (context, constraints) {
-                      final columns = constraints.crossAxisExtent >= 520 ? 5 : constraints.crossAxisExtent >= 360 ? 4 : 3;
-                      return SliverGrid.count(
-                    crossAxisCount: columns,
+                  sliver: SliverGrid.count(
+                    crossAxisCount: 4,
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 10,
                     childAspectRatio: .82,
@@ -147,13 +113,11 @@ class HomeScreen extends StatelessWidget {
                       _Feature(icon: Icons.picture_as_pdf_rounded, label: 'PDF Tools', color: AppColors.toolMerge, onTap: () => openTool(context, ToolId.merge)),
                       _Feature(icon: Icons.image_rounded, label: 'Import Images', color: AppColors.toolImageToPdf, onTap: () => openTool(context, ToolId.imageToPdf)),
                       _Feature(icon: Icons.file_open_rounded, label: 'Import Files', color: AppColors.toolSplit, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LibraryScreen()))),
-                      _Feature(icon: Icons.badge_rounded, label: 'ID Scan', color: AppColors.toolQrScan, onTap: () => openTool(context, ToolId.idScan)),
-                      _Feature(icon: Icons.text_fields_rounded, label: 'Extract Text', color: AppColors.toolFill, onTap: () => openTool(context, ToolId.ocr)),
+                      _Feature(icon: Icons.badge_rounded, label: 'ID Scan', color: AppColors.toolQrScan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmartScannerScreen()))),
+                      _Feature(icon: Icons.text_fields_rounded, label: 'Extract Text', color: AppColors.toolFill, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmartScannerScreen()))),
                       _Feature(icon: Icons.translate_rounded, label: 'Translate', color: AppColors.toolQrGen, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TranslationScreen(initialText: '')))),
                       _Feature(icon: Icons.apps_rounded, label: 'All Tools', color: AppColors.accentCoral, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ToolsScreen()))),
                     ],
-                  );
-                    },
                   ),
                 ),
                 SliverPadding(

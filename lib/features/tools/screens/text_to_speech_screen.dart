@@ -1,63 +1,118 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../translation/services/speech_service.dart';
-import '../../../core/storage/app_data_controller.dart';
 
+import '../../translation/services/speech_service.dart';
+
+/// Standalone Text to Speech tool: paste or type any text and have it read
+/// aloud in English, Urdu, or Arabic. Reuses the same on-device TTS engine
+/// already wired into the document detail and text-extraction screens, so
+/// this doesn't duplicate any playback logic — just gives it its own entry
+/// point in the Tools catalog for text that didn't come from a scan.
 class TextToSpeechScreen extends StatefulWidget {
-  const TextToSpeechScreen({super.key});
-  @override State<TextToSpeechScreen> createState() => _TextToSpeechScreenState();
+  final String initialText;
+  const TextToSpeechScreen({super.key, this.initialText = ''});
+
+  @override
+  State<TextToSpeechScreen> createState() => _TextToSpeechScreenState();
 }
 
 class _TextToSpeechScreenState extends State<TextToSpeechScreen> {
-  final _text = TextEditingController();
+  late final TextEditingController _controller = TextEditingController(text: widget.initialText);
   final _speech = SpeechService();
   String _language = 'en-US';
   bool _speaking = false;
 
+  static const _languages = <String, String>{
+    'en-US': 'English',
+    'ur-PK': 'Urdu',
+    'ar-SA': 'Arabic',
+  };
+
   @override
   void initState() {
     super.initState();
-    final saved = context.read<AppDataController>().defaultOcrLanguage;
-    if (saved == 'urd') _language = 'ur-PK';
-    if (saved == 'ara') _language = 'ar-SA';
+    // Keeps the Speak button's enabled state in sync as the user types,
+    // since TextEditingController changes don't trigger a rebuild on their own.
+    _controller.addListener(_onTextChanged);
   }
 
+  void _onTextChanged() => setState(() {});
+
   Future<void> _speak() async {
-    if (_text.text.trim().isEmpty) return;
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
     setState(() => _speaking = true);
-    try { await _speech.speak(_text.text, language: _language); }
-    finally { if (mounted) setState(() => _speaking = false); }
+    try {
+      await _speech.speak(text, language: _language);
+    } finally {
+      if (mounted) setState(() => _speaking = false);
+    }
+  }
+
+  Future<void> _stop() async {
+    await _speech.stop();
+    if (mounted) setState(() => _speaking = false);
   }
 
   @override
-  void dispose() { _speech.dispose(); _text.dispose(); super.dispose(); }
+  void dispose() {
+    _controller.removeListener(_onTextChanged);
+    _speech.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Text to Speech')),
-      body: ListView(padding: const EdgeInsets.fromLTRB(18, 18, 18, 32), children: [
-        Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Read text aloud', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6), const Text('Paste or type text, choose a language, and listen.'),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(value: _language, decoration: const InputDecoration(labelText: 'Language'), items: const [
-            DropdownMenuItem(value: 'en-US', child: Text('English')),
-            DropdownMenuItem(value: 'ur-PK', child: Text('Urdu')),
-            DropdownMenuItem(value: 'ar-SA', child: Text('Arabic')),
-            DropdownMenuItem(value: 'hi-IN', child: Text('Hindi')),
-            DropdownMenuItem(value: 'fa-IR', child: Text('Persian')),
-          ], onChanged: (v) { if (v != null) setState(() => _language = v); }),
-        ]))),
-        const SizedBox(height: 14),
-        TextField(controller: _text, minLines: 10, maxLines: 18, decoration: const InputDecoration(hintText: 'Type or paste text here…', border: OutlineInputBorder())),
-        const SizedBox(height: 14),
-        Row(children: [
-          Expanded(child: FilledButton.icon(onPressed: _speaking ? null : _speak, icon: Icon(_speaking ? Icons.volume_up_rounded : Icons.play_arrow_rounded), label: Text(_speaking ? 'Speaking…' : 'Speak'))),
-          const SizedBox(width: 10),
-          OutlinedButton.icon(onPressed: _speaking ? () => _speech.stop() : null, icon: const Icon(Icons.stop_rounded), label: const Text('Stop')),
-        ]),
-      ]),
+      body: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          children: [
+            DropdownButtonFormField<String>(
+              value: _language,
+              decoration: const InputDecoration(labelText: 'Voice language', border: OutlineInputBorder()),
+              items: _languages.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
+              onChanged: (v) => setState(() => _language = v ?? _language),
+            ),
+            const SizedBox(height: 14),
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                expands: true,
+                maxLines: null,
+                minLines: null,
+                textAlignVertical: TextAlignVertical.top,
+                decoration: InputDecoration(
+                  hintText: 'Type or paste text to have it read aloud…',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+                  filled: true,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _speaking || _controller.text.trim().isEmpty ? null : _speak,
+                    icon: const Icon(Icons.volume_up_rounded),
+                    label: Text(_speaking ? 'Speaking…' : 'Speak'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _speaking ? _stop : null,
+                    icon: const Icon(Icons.stop_rounded),
+                    label: const Text('Stop'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

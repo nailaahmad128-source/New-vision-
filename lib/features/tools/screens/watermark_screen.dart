@@ -11,7 +11,8 @@ import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
 class WatermarkScreen extends StatefulWidget {
-  const WatermarkScreen({super.key});
+  final String? initialSourcePath;
+  const WatermarkScreen({super.key, this.initialSourcePath});
   @override State<WatermarkScreen> createState() => _WatermarkScreenState();
 }
 
@@ -20,6 +21,12 @@ class _WatermarkScreenState extends State<WatermarkScreen> {
   final _text = TextEditingController(text: 'PDF Master Tools');
   double _size = 24;
   bool _working = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSourcePath != null) _path = widget.initialSourcePath;
+  }
 
   @override
   void dispose() { _text.dispose(); super.dispose(); }

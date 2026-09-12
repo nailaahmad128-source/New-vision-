@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_config.dart';
 import '../../../core/storage/app_data_controller.dart';
 
@@ -46,6 +47,21 @@ class SettingsScreen extends StatelessWidget {
               onChanged: data.setAutoDocumentDetection,
             ),
           ]),
+          const SizedBox(height: 14),
+          _Section(title: 'Cloud Conversion', children: [
+            ListTile(
+              leading: Icon(
+                (data.cloudConvertApiKey ?? '').isEmpty ? Icons.cloud_off_rounded : Icons.cloud_done_rounded,
+                color: (data.cloudConvertApiKey ?? '').isEmpty ? null : Colors.green,
+              ),
+              title: const Text('PDF ↔ Word/Excel/PowerPoint'),
+              subtitle: Text((data.cloudConvertApiKey ?? '').isEmpty
+                  ? 'Not configured — add a CloudConvert API key to enable'
+                  : 'Configured with CloudConvert'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => _apiKeyDialog(context, data),
+            ),
+          ]),
           _Section(title: 'About', children: [
             const ListTile(leading: Icon(Icons.picture_as_pdf_rounded), title: Text('PDF Master Tools'), subtitle: Text('Professional document scanner, PDF toolkit and OCR suite')),
             FutureBuilder<PackageInfo>(
@@ -77,6 +93,57 @@ class SettingsScreen extends StatelessWidget {
     'dark' => 'Dark',
     _ => 'System default',
   };
+
+  Future<void> _apiKeyDialog(BuildContext context, AppDataController data) async {
+    final controller = TextEditingController(text: data.cloudConvertApiKey ?? '');
+    var obscure = true;
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('CloudConvert API key'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: controller,
+                obscureText: obscure,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'API key',
+                  suffixIcon: IconButton(
+                    icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    onPressed: () => setDialogState(() => obscure = !obscure),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              InkWell(
+                onTap: () => launchUrl(Uri.parse('https://cloudconvert.com'), mode: LaunchMode.externalApplication),
+                child: const Text(
+                  'Get a free API key at cloudconvert.com',
+                  style: TextStyle(decoration: TextDecoration.underline),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            if ((data.cloudConvertApiKey ?? '').isNotEmpty)
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, ''),
+                child: const Text('Remove key'),
+              ),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (saved == null) return;
+    await data.setCloudConvertApiKey(saved);
+  }
 
   void _themeDialog(BuildContext context, AppDataController data) {
     showDialog(

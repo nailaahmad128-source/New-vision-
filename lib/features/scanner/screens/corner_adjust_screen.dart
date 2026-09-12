@@ -1,19 +1,34 @@
-import 'dart:io';
-import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image/image.dart' as img;
 
+import '../../../core/services/image_codec_isolate.dart';
+import '../../../core/theme/app_colors.dart';
+
+/// Full-screen manual corner-adjustment step of the scan pipeline.
+///
+/// This is always reachable — even when automatic detection fails, is
+/// disabled, or the device has no OpenCV support — so a scan is never
+/// stuck without a way to crop it. On open it makes one attempt at the
+/// native OpenCV edge detector to seed a starting guess; if that fails,
+/// the four handles start on an inset rectangle instead of pretending
+/// detection succeeded. The user can always drag any handle by hand.
 class CornerAdjustScreen extends StatefulWidget {
+  /// Path to a JPEG file on disk containing exactly [imageBytes] — required
+  /// because the native detector/crop channel operates on a file path.
   final String imagePath;
-  final List<ui.Offset>? initialCorners;
+  final Uint8List imageBytes;
+
+  /// Normalized (0..1) starting corners, in image space. Pass null to make
+  /// this screen attempt auto-detection itself before falling back to a
+  /// default inset rectangle.
+  final List<Offset>? initialCorners;
 
   const CornerAdjustScreen({
     super.key,
     required this.imagePath,
+    required this.imageBytes,
     this.initialCorners,
   });
 
@@ -22,93 +37,74 @@ class CornerAdjustScreen extends StatefulWidget {
 }
 
 class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
-  static const _channel =
-      MethodChannel('com.hameed.pdfmastertools/scanner');
+  static const _scannerChannel = MethodChannel('com.hameed.pdfmastertools/scanner');
 
-  List<ui.Offset> _points = const [
-    ui.Offset(.08, .08),
-    ui.Offset(.92, .08),
-    ui.Offset(.92, .92),
-    ui.Offset(.08, .92),
-  ];
+  List<Offset> _corners = _defaultRect();
+  int? _imgW;
+  int? _imgH;
+  bool _ready = false;
+  bool _detecting = false;
+  int? _activeHandle;
 
-  Size _imageSize = Size.zero;
-  bool _saving = false;
+  static List<Offset> _defaultRect() => const [
+        Offset(0.08, 0.08),
+        Offset(0.92, 0.08),
+        Offset(0.92, 0.92),
+        Offset(0.08, 0.92),
+      ];
 
   @override
   void initState() {
     super.initState();
+    _bootstrap();
+  }
 
-    final points = widget.initialCorners;
-    if (points != null && points.length == 4) {
-      _points = List<ui.Offset>.from(points);
+  Future<void> _bootstrap() async {
+    final dims = await decodeImageDimensionsInBackground(widget.imageBytes);
+    if (!mounted) return;
+    setState(() {
+      _imgW = dims?.width;
+      _imgH = dims?.height;
+      _corners = (widget.initialCorners != null && widget.initialCorners!.length == 4)
+          ? List.of(widget.initialCorners!)
+          : _defaultRect();
+      _ready = true;
+    });
+    if (widget.initialCorners == null) {
+      await _autoDetect(silent: true);
     }
-
-    _readImageSize();
   }
 
-  Future<void> _readImageSize() async {
+  Future<void> _autoDetect({bool silent = false}) async {
+    if (!silent) setState(() => _detecting = true);
     try {
-      final Uint8List bytes =
-          await File(widget.imagePath).readAsBytes();
-
-      final size = _decodeSize(bytes);
-
-      if (mounted) {
-        setState(() => _imageSize = size);
+      final detected = await _scannerChannel.invokeMethod<List<dynamic>>(
+        'detectDocument',
+        {'path': widget.imagePath},
+      );
+      final points = detected
+          ?.map((p) => Offset((p['x'] as num).toDouble(), (p['y'] as num).toDouble()))
+          .toList();
+      if (!mounted) return;
+      if (points != null && points.length == 4) {
+        setState(() => _corners = points);
+      } else if (!silent) {
+        _notify('No document edges found — drag the corners into place.');
       }
-    } catch (_) {}
-  }
-
-  Size _decodeSize(Uint8List bytes) {
-    final decoded = img.decodeImage(Uint8List.fromList(bytes));
-
-    if (decoded == null) {
-      return const Size(1, 1);
-    }
-
-    return Size(
-      decoded.width.toDouble(),
-      decoded.height.toDouble(),
-    );
-  }
-
-  Future<void> _apply() async {
-    setState(() => _saving = true);
-
-    try {
-      final output =
-          await _channel.invokeMethod<String>('perspectiveCrop', {
-        'path': widget.imagePath,
-        'points': _points
-            .map((p) => {
-                  'x': p.dx,
-                  'y': p.dy,
-                })
-            .toList(),
-      });
-
-      if (output == null || output.isEmpty) {
-        throw StateError('No cropped image returned');
-      }
-
-      if (mounted) {
-        Navigator.of(context).pop(output);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not crop this page: $e'),
-          ),
-        );
+    } catch (_) {
+      if (!silent && mounted) {
+        _notify('Automatic detection is unavailable on this device — drag the corners into place.');
       }
     } finally {
-      if (mounted) {
-        setState(() => _saving = false);
-      }
+      if (!silent && mounted) setState(() => _detecting = false);
     }
   }
+
+  void _notify(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _reset() => setState(() => _corners = _defaultRect());
 
   @override
   Widget build(BuildContext context) {
@@ -119,169 +115,128 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
         foregroundColor: Colors.white,
         title: const Text('Adjust Corners'),
         actions: [
-          TextButton(
-            onPressed: _saving ? null : _apply,
-            child: const Text(
-              'Done',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+          IconButton(
+            tooltip: 'Auto detect',
+            onPressed: _detecting ? null : () => _autoDetect(),
+            icon: _detecting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.auto_fix_high_rounded),
           ),
+          IconButton(tooltip: 'Reset', onPressed: _reset, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final rect =
-                    _containRect(constraints.biggest, _imageSize);
-
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Container(color: Colors.black),
+      body: SafeArea(
+        child: !_ready
+            ? const Center(child: CircularProgressIndicator(color: Colors.white))
+            : Column(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    child: Text(
+                      'Drag each corner so it sits on the edge of the document.',
+                      style: TextStyle(color: Colors.white70),
+                      textAlign: TextAlign.center,
                     ),
-
-                    Positioned.fromRect(
-                      rect: rect,
-                      child: Image.file(
-                        File(widget.imagePath),
-                        fit: BoxFit.fill,
-                      ),
-                    ),
-
-                    Positioned.fromRect(
-                      rect: rect,
-                      child: CustomPaint(
-                        painter: _CornerPainter(_points),
-                      ),
-                    ),
-
-                    for (var i = 0; i < 4; i++)
-                      _Handle(
-                        point: ui.Offset(
-                          rect.left + _points[i].dx * rect.width,
-                          rect.top + _points[i].dy * rect.height,
-                        ),
-                        onPanUpdate: (DragUpdateDetails details) {
-                          final ui.Offset canvasPoint = ui.Offset(
-                            rect.left + _points[i].dx * rect.width,
-                            rect.top + _points[i].dy * rect.height,
-                          ) +
-                              details.delta;
-
-                          final ui.Offset imagePoint =
-                              _fromCanvas(canvasPoint, rect);
-
-                          _movePoint(i, imagePoint);
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final imageRect = _fitRect(
+                            constraints.biggest,
+                            (_imgW ?? 3).toDouble(),
+                            (_imgH ?? 4).toDouble(),
+                          );
+                          return Stack(
+                            children: [
+                              Positioned.fromRect(
+                                rect: imageRect,
+                                child: Image.memory(widget.imageBytes, fit: BoxFit.fill),
+                              ),
+                              CustomPaint(
+                                size: constraints.biggest,
+                                painter: _CornerLinesPainter(_toPixels(imageRect)),
+                              ),
+                              for (var i = 0; i < 4; i++) _handle(i, imageRect),
+                            ],
+                          );
                         },
                       ),
-                  ],
-                );
-              },
-            ),
-          ),
-
-          SafeArea(
-            top: false,
-            child: Container(
-              padding:
-                  const EdgeInsets.fromLTRB(18, 12, 18, 14),
-              color: Colors.black,
-              child: const Text(
-                'Drag each corner onto the exact document edge. '
-                'The preview uses the original image, not the '
-                'already-cropped result.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 13,
-                ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: FilledButton.icon(
+                            onPressed: () => Navigator.of(context).pop(_corners),
+                            icon: const Icon(Icons.check_rounded),
+                            label: const Text('Confirm & Crop'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ),
-        ],
       ),
     );
   }
 
-  void _movePoint(int index, ui.Offset point) {
-    final next = List<ui.Offset>.from(_points);
-
-    next[index] = ui.Offset(
-      point.dx.clamp(0.0, 1.0),
-      point.dy.clamp(0.0, 1.0),
-    );
-
-    setState(() => _points = next);
+  Rect _fitRect(Size bounds, double w, double h) {
+    final scale = (bounds.width / w < bounds.height / h) ? bounds.width / w : bounds.height / h;
+    final rw = w * scale;
+    final rh = h * scale;
+    final left = (bounds.width - rw) / 2;
+    final top = (bounds.height - rh) / 2;
+    return Rect.fromLTWH(left, top, rw, rh);
   }
 
-  Rect _containRect(Size viewport, Size image) {
-    if (image.width <= 1 || image.height <= 1) {
-      final side =
-          math.min(viewport.width, viewport.height);
+  List<Offset> _toPixels(Rect imageRect) => _corners
+      .map((c) => Offset(imageRect.left + c.dx * imageRect.width, imageRect.top + c.dy * imageRect.height))
+      .toList();
 
-      return Rect.fromCenter(
-        center: viewport.center,
-        width: side,
-        height: side,
-      );
-    }
-
-    final fitted =
-        applyBoxFit(BoxFit.contain, image, viewport);
-
-    return Alignment.center.inscribe(
-      fitted.destination,
-      ui.Offset.zero & viewport,
-    );
-  }
-
-  ui.Offset _fromCanvas(
-    ui.Offset canvas,
-    Rect rect,
-  ) {
-    return ui.Offset(
-      (canvas.dx - rect.left) / rect.width,
-      (canvas.dy - rect.top) / rect.height,
-    );
-  }
-}
-
-class _Handle extends StatelessWidget {
-  final ui.Offset point;
-  final void Function(DragUpdateDetails) onPanUpdate;
-
-  const _Handle({
-    required this.point,
-    required this.onPanUpdate,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _handle(int index, Rect imageRect) {
+    final px = imageRect.left + _corners[index].dx * imageRect.width;
+    final py = imageRect.top + _corners[index].dy * imageRect.height;
+    const handleSize = 36.0;
     return Positioned(
-      left: point.dx - 18,
-      top: point.dy - 18,
+      left: px - handleSize / 2,
+      top: py - handleSize / 2,
       child: GestureDetector(
-        onPanUpdate: onPanUpdate,
+        onPanStart: (_) => setState(() => _activeHandle = index),
+        onPanUpdate: (details) {
+          setState(() {
+            final currentPx = imageRect.left + _corners[index].dx * imageRect.width + details.delta.dx;
+            final currentPy = imageRect.top + _corners[index].dy * imageRect.height + details.delta.dy;
+            final dx = ((currentPx - imageRect.left) / imageRect.width).clamp(0.0, 1.0);
+            final dy = ((currentPy - imageRect.top) / imageRect.height).clamp(0.0, 1.0);
+            _corners[index] = Offset(dx, dy);
+          });
+        },
+        onPanEnd: (_) => setState(() => _activeHandle = null),
         child: Container(
-          width: 36,
-          height: 36,
+          width: handleSize,
+          height: handleSize,
           decoration: BoxDecoration(
-            color: const Color(0xFF5B4FE9),
             shape: BoxShape.circle,
-            border: Border.all(
-              color: Colors.white,
-              width: 3,
-            ),
-          ),
-          child: const Icon(
-            Icons.drag_indicator_rounded,
-            color: Colors.white,
-            size: 18,
+            color: (_activeHandle == index ? AppColors.brandPrimary : Colors.white).withValues(alpha: .92),
+            border: Border.all(color: Colors.black26, width: 2),
+            boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 1))],
           ),
         ),
       ),
@@ -289,60 +244,29 @@ class _Handle extends StatelessWidget {
   }
 }
 
-class _CornerPainter extends CustomPainter {
-  final List<ui.Offset> points;
-
-  const _CornerPainter(this.points);
+class _CornerLinesPainter extends CustomPainter {
+  final List<Offset> pixelCorners;
+  _CornerLinesPainter(this.pixelCorners);
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (points.length != 4) {
-      return;
-    }
-
-    final mapped = points
-        .map(
-          (p) => ui.Offset(
-            p.dx * size.width,
-            p.dy * size.height,
-          ),
-        )
-        .toList();
-
-    final shade = Paint()
-      ..color = Colors.black.withValues(alpha: .30);
-
-    final path = Path()
-      ..addRect(ui.Offset.zero & size)
-      ..addPolygon(mapped, true)
-      ..fillType = PathFillType.evenOdd;
-
-    canvas.drawPath(path, shade);
-
+    if (pixelCorners.length != 4) return;
+    final fill = Paint()
+      ..color = AppColors.brandPrimary.withValues(alpha: .18)
+      ..style = PaintingStyle.fill;
     final line = Paint()
-      ..color = Colors.white
+      ..color = AppColors.brandPrimary
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5;
-
-    final outline = Path()
-      ..moveTo(mapped[0].dx, mapped[0].dy);
-
-    for (var i = 1; i < mapped.length; i++) {
-      outline.lineTo(
-        mapped[i].dx,
-        mapped[i].dy,
-      );
+      ..strokeWidth = 3;
+    final path = Path()..moveTo(pixelCorners[0].dx, pixelCorners[0].dy);
+    for (var i = 1; i < pixelCorners.length; i++) {
+      path.lineTo(pixelCorners[i].dx, pixelCorners[i].dy);
     }
-
-    outline.close();
-
-    canvas.drawPath(outline, line);
+    path.close();
+    canvas.drawPath(path, fill);
+    canvas.drawPath(path, line);
   }
 
   @override
-  bool shouldRepaint(
-    covariant _CornerPainter oldDelegate,
-  ) {
-    return oldDelegate.points != points;
-  }
+  bool shouldRepaint(covariant _CornerLinesPainter oldDelegate) => oldDelegate.pixelCorners != pixelCorners;
 }

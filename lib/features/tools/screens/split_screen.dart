@@ -13,7 +13,8 @@ import '../widgets/tool_result_screen.dart';
 enum _SplitMode { everyPage, ranges }
 
 class SplitScreen extends StatefulWidget {
-  const SplitScreen({super.key});
+  final String? initialSourcePath;
+  const SplitScreen({super.key, this.initialSourcePath});
   @override
   State<SplitScreen> createState() => _SplitScreenState();
 }
@@ -25,15 +26,27 @@ class _SplitScreenState extends State<SplitScreen> {
   final _rangesController = TextEditingController();
   bool _working = false;
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSourcePath != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadFile(widget.initialSourcePath!));
+    }
+  }
+
   Future<void> _pickFile() async {
     final picked = await pickSourceFiles(context, allowMultiple: false, extensions: const ['pdf']);
     if (picked.isEmpty) return;
+    await _loadFile(picked.first);
+  }
+
+  Future<void> _loadFile(String path) async {
     try {
       final tools = context.read<PdfToolsService>();
-      final count = await tools.pageCount(picked.first);
+      final count = await tools.pageCount(path);
       if (!mounted) return;
       setState(() {
-        _path = picked.first;
+        _path = path;
         _pageCount = count;
       });
     } catch (e) {

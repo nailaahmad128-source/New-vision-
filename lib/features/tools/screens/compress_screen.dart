@@ -11,7 +11,8 @@ import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
 class CompressScreen extends StatefulWidget {
-  const CompressScreen({super.key});
+  final String? initialSourcePath;
+  const CompressScreen({super.key, this.initialSourcePath});
   @override
   State<CompressScreen> createState() => _CompressScreenState();
 }
@@ -22,16 +23,28 @@ class _CompressScreenState extends State<CompressScreen> {
   CompressionLevel _level = CompressionLevel.medium;
   bool _working = false;
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSourcePath != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadFile(widget.initialSourcePath!));
+    }
+  }
+
   Future<void> _pickFile() async {
     final picked = await pickSourceFiles(context, allowMultiple: false, extensions: const ['pdf']);
     if (picked.isEmpty) return;
+    await _loadFile(picked.first);
+  }
+
+  Future<void> _loadFile(String path) async {
     try {
       final tools = context.read<PdfToolsService>();
-      final size = await tools.storage.fileSize(picked.first);
+      final size = await tools.storage.fileSize(path);
       // Confirm the file actually opens as a valid PDF before accepting it.
-      await tools.pageCount(picked.first);
+      await tools.pageCount(path);
       if (!mounted) return;
-      setState(() { _path = picked.first; _originalSize = size; });
+      setState(() { _path = path; _originalSize = size; });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

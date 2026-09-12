@@ -101,6 +101,5 @@ flutter {
 
 dependencies {
     implementation("org.opencv:opencv:4.10.0")
-    implementation("androidx.exifinterface:exifinterface:1.3.7")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.3")
 }

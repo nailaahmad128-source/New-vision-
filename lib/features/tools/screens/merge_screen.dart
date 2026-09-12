@@ -11,7 +11,8 @@ import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
 class MergeScreen extends StatefulWidget {
-  const MergeScreen({super.key});
+  final String? initialSourcePath;
+  const MergeScreen({super.key, this.initialSourcePath});
   @override
   State<MergeScreen> createState() => _MergeScreenState();
 }
@@ -19,6 +20,12 @@ class MergeScreen extends StatefulWidget {
 class _MergeScreenState extends State<MergeScreen> {
   final List<String> _paths = [];
   bool _working = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSourcePath != null) _paths.add(widget.initialSourcePath!);
+  }
 
   Future<void> _addFiles() async {
     final picked = await pickSourceFiles(context, allowMultiple: true, extensions: const ['pdf']);

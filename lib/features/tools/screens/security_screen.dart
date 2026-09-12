@@ -12,7 +12,8 @@ import '../widgets/tool_result_screen.dart';
 enum _SecMode { protect, unlock }
 
 class SecurityScreen extends StatefulWidget {
-  const SecurityScreen({super.key});
+  final String? initialSourcePath;
+  const SecurityScreen({super.key, this.initialSourcePath});
   @override
   State<SecurityScreen> createState() => _SecurityScreenState();
 }
@@ -27,6 +28,12 @@ class _SecurityScreenState extends State<SecurityScreen> {
   bool _allowCopying = true;
   bool _obscure = true;
   bool _working = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSourcePath != null) _path = widget.initialSourcePath;
+  }
 
   Future<void> _pickFile() async {
     final picked = await pickSourceFiles(context, allowMultiple: false, extensions: const ['pdf']);

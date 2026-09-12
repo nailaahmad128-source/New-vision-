@@ -1,7 +1,7 @@
 name: pdf_master_tools
 description: "PDF Master Tools - Professional PDF toolkit"
 publish_to: 'none'
-version: 2.0.0+12
+version: 1.0.8+12
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -75,6 +75,10 @@ dependencies:
 
   # Ads
   google_mobile_ads: ^9.0.0
+
+  # Cloud document conversion (PDF <-> Word/Excel/PowerPoint) — provider is
+  # swappable at the app layer; see lib/core/services/conversion/.
+  http: ^1.2.2
 
   # Utilities
   uuid: ^4.5.1

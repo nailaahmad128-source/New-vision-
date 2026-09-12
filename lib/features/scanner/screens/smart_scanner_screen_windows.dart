@@ -23,12 +23,12 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
   bool _busy = false;
 
   Future<void> _pickImages() async {
-    final r = await FilePicker.pickFiles(type: FileType.image,  withData: false);
-    
+    final r = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: true, withData: false);
+    if (r == null) return;
     setState(() {
       _files
         ..clear()
-        ..addAll(r.where((f) => f.path != null).map((f) => f.path!));
+        ..addAll(r.files.where((f) => f.path != null).map((f) => f.path!));
     });
   }
 

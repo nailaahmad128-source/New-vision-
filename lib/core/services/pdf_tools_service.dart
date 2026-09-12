@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:typed_data';
 import 'dart:ui' show Offset, Rect;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:printing/printing.dart';
@@ -114,66 +115,6 @@ class PdfToolsService {
     }
     src.dispose();
     return outputs;
-  }
-
-  /// Creates a new PDF containing only the selected 0-based pages, preserving
-  /// their original order. Throws when no valid pages are selected.
-  Future<File> extractPages(
-    String path, {
-    required List<int> pageIndexes,
-    required String outputName,
-  }) async {
-    final src = PdfDocument(inputBytes: await File(path).readAsBytes());
-    final valid = pageIndexes.where((i) => i >= 0 && i < src.pages.count).toList();
-    if (valid.isEmpty) {
-      src.dispose();
-      throw ArgumentError('Select at least one valid page.');
-    }
-    final out = PdfDocument();
-    out.pageSettings.margins.all = 0;
-    for (final i in valid) {
-      final source = src.pages[i];
-      final page = out.pages.add();
-      page.graphics.drawPdfTemplate(source.createTemplate(), const Offset(0, 0), source.size);
-    }
-    final bytes = await out.save();
-    out.dispose();
-    src.dispose();
-    final file = await storage.newTmpFile(outputName);
-    await file.writeAsBytes(bytes, flush: true);
-    return file;
-  }
-
-  /// Removes the selected 0-based pages and returns a new PDF. At least one
-  /// page must remain in the resulting document.
-  Future<File> deletePages(
-    String path, {
-    required List<int> pageIndexes,
-    required String outputName,
-  }) async {
-    final src = PdfDocument(inputBytes: await File(path).readAsBytes());
-    final remove = pageIndexes.toSet();
-    final keep = <int>[
-      for (var i = 0; i < src.pages.count; i++)
-        if (!remove.contains(i)) i,
-    ];
-    if (keep.isEmpty) {
-      src.dispose();
-      throw ArgumentError('At least one page must remain.');
-    }
-    final out = PdfDocument();
-    out.pageSettings.margins.all = 0;
-    for (final i in keep) {
-      final source = src.pages[i];
-      final page = out.pages.add();
-      page.graphics.drawPdfTemplate(source.createTemplate(), const Offset(0, 0), source.size);
-    }
-    final bytes = await out.save();
-    out.dispose();
-    src.dispose();
-    final file = await storage.newTmpFile(outputName);
-    await file.writeAsBytes(bytes, flush: true);
-    return file;
   }
 
   /// Rebuild a document with pages in [newOrder] (0-indexed positions into

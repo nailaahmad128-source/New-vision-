@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -22,7 +21,6 @@ class AdsService {
 
   bool _initialized = false;
   InterstitialAd? _interstitial;
-  Timer? _retryTimer;
   DateTime? _lastInterstitialShown;
   int _actionsSinceLastInterstitial = 0;
 
@@ -60,23 +58,13 @@ class AdsService {
   bool get isReady => _initialized;
 
   void _preloadInterstitial() {
-    if (!_initialized || _interstitial != null) return;
+    if (!_initialized) return;
     InterstitialAd.load(
       adUnitId: interstitialUnitId,
       request: const AdRequest(),
       adLoadCallback: InterstitialAdLoadCallback(
-        onAdLoaded: (ad) {
-          _interstitial?.dispose();
-          _interstitial = ad;
-          _retryTimer?.cancel();
-          _retryTimer = null;
-        },
-        onAdFailedToLoad: (_) {
-          _interstitial = null;
-          // A short backoff avoids a tight retry loop while offline.
-          _retryTimer?.cancel();
-          _retryTimer = Timer(const Duration(seconds: 30), _preloadInterstitial);
-        },
+        onAdLoaded: (ad) => _interstitial = ad,
+        onAdFailedToLoad: (_) => _interstitial = null,
       ),
     );
   }
@@ -113,9 +101,6 @@ class AdsService {
   }
 
   void dispose() {
-    _retryTimer?.cancel();
-    _retryTimer = null;
     _interstitial?.dispose();
-    _interstitial = null;
   }
 }

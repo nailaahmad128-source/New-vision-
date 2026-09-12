@@ -63,36 +63,6 @@ class _ToolResultScreenState extends State<ToolResultScreen> {
     }
   }
 
-  Future<void> _saveAllToLibrary() async {
-    if (widget.results.isEmpty) return;
-    var savedCount = 0;
-    try {
-      final data = context.read<AppDataController>();
-      for (final doc in List<DocumentItem>.from(widget.results)) {
-        final saved = await data.saveToolResultToLibrary(doc);
-        if (saved != null) savedCount++;
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$savedCount file${savedCount == 1 ? '' : 's'} saved to Library')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save all files: $e')),
-      );
-    }
-  }
-
-  Future<void> _shareAll() async {
-    final existing = <XFile>[];
-    for (final doc in widget.results) {
-      if (await File(doc.filePath).exists()) existing.add(XFile(doc.filePath));
-    }
-    if (existing.isEmpty) return;
-    await Share.shareXFiles(existing, text: 'Shared from PDF Master Tools');
-  }
-
   Future<void> _saveToLibrary(DocumentItem doc) async {
     try {
       final data = context.read<AppDataController>();
@@ -267,7 +237,13 @@ class _ToolResultScreenState extends State<ToolResultScreen> {
                     return Card(
                       child: ListTile(
                         leading: Icon(
-                          doc.type == 'image' ? Icons.image_rounded : Icons.picture_as_pdf_rounded,
+                          switch (doc.type) {
+                            'image' => Icons.image_rounded,
+                            'docx' => Icons.description_rounded,
+                            'xlsx' => Icons.table_chart_rounded,
+                            'pptx' => Icons.slideshow_rounded,
+                            _ => Icons.picture_as_pdf_rounded,
+                          },
                           color: theme.colorScheme.primary,
                         ),
                         title: Text(doc.name, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -340,28 +316,6 @@ class _ToolResultScreenState extends State<ToolResultScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              if (widget.results.length > 1) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _saveAllToLibrary,
-                        icon: const Icon(Icons.library_add_rounded),
-                        label: const Text('Save all'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _shareAll,
-                        icon: const Icon(Icons.share_rounded),
-                        label: const Text('Share all'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-              ],
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(

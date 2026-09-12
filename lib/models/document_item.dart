@@ -15,6 +15,11 @@ class DocumentItem {
   final bool isFavorite;
   final String? extractedText; // OCR text used for document search
 
+  /// True once OCR has attached real extracted text to this document, so
+  /// the Library's "Searchable" filter and per-tile badge reflect only
+  /// documents that can actually be found by their scanned text.
+  bool get isSearchable => (extractedText ?? '').trim().isNotEmpty;
+
   const DocumentItem({
     required this.id,
     required this.name,

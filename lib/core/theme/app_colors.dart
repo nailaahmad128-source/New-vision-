@@ -44,4 +44,10 @@ class AppColors {
   static const Color toolSecurity = Color(0xFF6C757D);
   static const Color toolQrScan = Color(0xFF06D6A0);
   static const Color toolQrGen = Color(0xFFFFB703);
+  static const Color toolTranslate = Color(0xFF118AB2);
+  static const Color toolTts = Color(0xFF9C6644);
+  static const Color toolOcr = Color(0xFF7209B7);
+  static const Color toolConvertWord = Color(0xFF2B5FE0);
+  static const Color toolConvertExcel = Color(0xFF1E7B45);
+  static const Color toolConvertPpt = Color(0xFFD64550);
 }

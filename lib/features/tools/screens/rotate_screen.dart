@@ -12,7 +12,8 @@ import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
 class RotateScreen extends StatefulWidget {
-  const RotateScreen({super.key});
+  final String? initialSourcePath;
+  const RotateScreen({super.key, this.initialSourcePath});
   @override
   State<RotateScreen> createState() => _RotateScreenState();
 }
@@ -26,13 +27,25 @@ class _RotateScreenState extends State<RotateScreen> {
   bool _working = false;
   bool _allSelected = true;
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSourcePath != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadFile(widget.initialSourcePath!));
+    }
+  }
+
   Future<void> _pickFile() async {
     final picked = await pickSourceFiles(context, allowMultiple: false, extensions: const ['pdf']);
     if (picked.isEmpty) return;
-    setState(() { _path = picked.first; _loading = true; });
+    await _loadFile(picked.first);
+  }
+
+  Future<void> _loadFile(String path) async {
+    setState(() { _path = path; _loading = true; });
     try {
       final tools = context.read<PdfToolsService>();
-      final thumbs = await tools.renderPageThumbnails(picked.first);
+      final thumbs = await tools.renderPageThumbnails(path);
       if (!mounted) return;
       if (thumbs.isEmpty) throw Exception('No readable pages found');
       setState(() {

@@ -146,11 +146,19 @@ class _Thumb extends StatelessWidget {
         File(doc.thumbnailPath!).existsSync()) {
       return ClipRRect(
         borderRadius: radius,
-        child: Image.file(
-          File(doc.thumbnailPath!),
+        child: SizedBox(
           width: 44,
           height: 52,
-          fit: BoxFit.cover,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.file(
+                File(doc.thumbnailPath!),
+                fit: BoxFit.cover,
+              ),
+              _StatusBadges(doc: doc),
+            ],
+          ),
         ),
       );
     }
@@ -162,12 +170,51 @@ class _Thumb extends StatelessWidget {
         color: theme.colorScheme.primary.withValues(alpha: 0.1),
         borderRadius: radius,
       ),
-      child: Icon(
-        doc.type == 'image'
-            ? Icons.image_rounded
-            : Icons.picture_as_pdf_rounded,
-        color: theme.colorScheme.primary,
-        size: 22,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Center(
+            child: Icon(
+              switch (doc.type) {
+                'image' => Icons.image_rounded,
+                'docx' => Icons.description_rounded,
+                'xlsx' => Icons.table_chart_rounded,
+                'pptx' => Icons.slideshow_rounded,
+                _ => Icons.picture_as_pdf_rounded,
+              },
+              color: theme.colorScheme.primary,
+              size: 22,
+            ),
+          ),
+          _StatusBadges(doc: doc),
+        ],
+      ),
+    );
+  }
+}
+
+/// Small favorite/OCR indicators drawn over a thumbnail so a document's
+/// status is visible at a glance in the list, not only inside its menu.
+class _StatusBadges extends StatelessWidget {
+  final DocumentItem doc;
+  const _StatusBadges({required this.doc});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!doc.isFavorite && !doc.isSearchable) return const SizedBox.shrink();
+    return Positioned(
+      top: 2,
+      right: 2,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (doc.isSearchable)
+            const Icon(Icons.text_fields_rounded, size: 11, color: Colors.white, shadows: [Shadow(blurRadius: 2, color: Colors.black54)]),
+          if (doc.isFavorite) ...[
+            if (doc.isSearchable) const SizedBox(width: 2),
+            const Icon(Icons.star_rounded, size: 13, color: Colors.amber, shadows: [Shadow(blurRadius: 2, color: Colors.black54)]),
+          ],
+        ],
       ),
     );
   }

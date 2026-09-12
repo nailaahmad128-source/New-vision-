@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:path/path.dart' as p;
 import '../../models/document_item.dart';
 import '../../models/trash_item.dart';
 import '../../models/tool_history_entry.dart';
@@ -86,45 +85,6 @@ class AppDataController extends ChangeNotifier {
     final doc = documentById(id);
     if (doc == null) return;
     await updateDocument(doc.copyWith(isFavorite: !doc.isFavorite));
-  }
-
-  /// Creates a real duplicate inside the Library, preserving the source
-  /// document's metadata and extension while using a new collision-safe path.
-  Future<DocumentItem?> duplicateDocument(String id) async {
-    final doc = documentById(id);
-    if (doc == null) return null;
-    final source = File(doc.filePath);
-    if (!await source.exists()) return null;
-
-    final copyPath = await storage.importIntoLibrary(
-      source,
-      preferredName: '${p.basenameWithoutExtension(doc.name)}_copy${p.extension(doc.name)}',
-    );
-    final thumb = doc.thumbnailPath;
-    String? copiedThumb;
-    if (thumb != null && await File(thumb).exists()) {
-      copiedThumb = await storage.saveThumbnail(
-        await File(thumb).readAsBytes(),
-        name: p.basename(thumb),
-      );
-    }
-    final now = DateTime.now();
-    final copy = DocumentItem(
-      id: storage.newId(),
-      name: p.basename(copyPath),
-      filePath: copyPath,
-      thumbnailPath: copiedThumb,
-      sizeBytes: await storage.fileSize(copyPath),
-      createdAt: now,
-      modifiedAt: now,
-      type: doc.type,
-      sourceToolId: doc.sourceToolId,
-      pageCount: doc.pageCount,
-      isFavorite: false,
-      extractedText: doc.extractedText,
-    );
-    await addDocument(copy);
-    return copy;
   }
 
   /// Moves a document to Recently Deleted. The physical file is moved
@@ -255,11 +215,8 @@ class AppDataController extends ChangeNotifier {
     if (doc == null) return null;
     final cleaned = newName.trim();
     if (cleaned.isEmpty) return null;
-    final originalExt = p.extension(doc.filePath);
-    final ext = originalExt.isEmpty
-        ? (doc.type == 'pdf' ? '.pdf' : '')
-        : originalExt;
-    final finalName = cleaned.toLowerCase().endsWith(ext.toLowerCase())
+    final ext = doc.type == 'pdf' ? '.pdf' : '';
+    final finalName = cleaned.toLowerCase().endsWith(ext) || ext.isEmpty
         ? cleaned
         : '$cleaned$ext';
     final source = File(doc.filePath);
@@ -370,6 +327,31 @@ class AppDataController extends ChangeNotifier {
 
   Future<void> setAutoDocumentDetection(bool value) async {
     await _prefsBox.put('auto_document_detection', value);
+    notifyListeners();
+  }
+
+  // ---------------- Cloud document conversion ----------------
+  // See lib/core/services/conversion/ — the app never assumes a specific
+  // vendor beyond this configuration; conversion_service.dart is the only
+  // place that reads conversionProviderId to pick an implementation.
+
+  String get conversionProviderId =>
+      _prefsBox.get('conversion_provider_id', defaultValue: 'cloudconvert') as String;
+
+  Future<void> setConversionProviderId(String value) async {
+    await _prefsBox.put('conversion_provider_id', value);
+    notifyListeners();
+  }
+
+  String? get cloudConvertApiKey => _prefsBox.get('cloudconvert_api_key') as String?;
+
+  Future<void> setCloudConvertApiKey(String? value) async {
+    final trimmed = (value ?? '').trim();
+    if (trimmed.isEmpty) {
+      await _prefsBox.delete('cloudconvert_api_key');
+    } else {
+      await _prefsBox.put('cloudconvert_api_key', trimmed);
+    }
     notifyListeners();
   }
 
