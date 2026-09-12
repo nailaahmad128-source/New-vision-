@@ -20,8 +20,8 @@ class LiveDocumentCameraScreen extends StatelessWidget {
           const SizedBox(height: 24),
           FilledButton.icon(
             onPressed: () async {
-              final r = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: false);
-              final path = r?.files.single.path;
+              final file = await FilePicker.pickFile(type: FileType.image);
+              final path = file?.path;
               if (path != null && context.mounted) Navigator.pop(context, XFile(path));
             },
             icon: const Icon(Icons.folder_open_rounded), label: const Text('Choose document image'),
