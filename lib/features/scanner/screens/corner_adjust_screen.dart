@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -58,8 +57,7 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
   }
 
   Future<Size> _decodeSize(List<int> bytes) async {
-    final Uint8List imageBytes = Uint8List.fromList(bytes);
-    final decoded = img.decodeImage(imageBytes);
+    final decoded = img.decodeImage(bytes);
 
     if (decoded == null) {
       return const Size(1, 1);
@@ -251,11 +249,11 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
 
 class _Handle extends StatelessWidget {
   final Offset point;
-  final void Function(DragUpdateDetails) onPanUpdate;
+  final ValueChanged<Offset> onDrag;
 
   const _Handle({
     required this.point,
-    required this.onPanUpdate,
+    required this.onDrag,
   });
 
   @override
@@ -264,26 +262,80 @@ class _Handle extends StatelessWidget {
       left: point.dx - 18,
       top: point.dy - 18,
       child: GestureDetector(
-        onPanUpdate: onPanUpdate,
+        onPanUpdate: (details) {
+          onDrag(details.delta);
+        },
         child: Container(
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: const Color(0xFF5B4FE9),
             shape: BoxShape.circle,
             border: Border.all(
-              color: Colors.blue,
+              color: Colors.white,
               width: 3,
             ),
-            boxShadow: const [
-              BoxShadow(
-                blurRadius: 6,
-                color: Colors.black26,
-              ),
-            ],
+          ),
+          child: const Icon(
+            Icons.drag_indicator_rounded,
+            color: Colors.white,
+            size: 18,
           ),
         ),
       ),
     );
+  }
+}
+
+class _CornerPainter extends CustomPainter {
+  final List<Offset> points;
+
+  const _CornerPainter(this.points);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length != 4) {
+      return;
+    }
+
+    final mapped = points
+        .map(
+          (p) => Offset(
+            p.dx * size.width,
+            p.dy * size.height,
+          ),
+        )
+        .toList();
+
+    final shade = Paint()
+      ..color = Colors.black.withValues(alpha: .30);
+
+    final path = Path()
+      ..addRect(Offset.zero & size)
+      ..addPolygon(mapped, true)
+      ..fillType = PathFillType.evenOdd;
+
+    canvas.drawPath(path, shade);
+
+    final line = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+
+    final outline = Path()
+      ..moveTo(mapped[0].dx, mapped[0].dy);
+
+    for (var i = 1; i < mapped.length; i++) {
+      outline.lineTo(mapped[i].dx, mapped[i].dy);
+    }
+
+    outline.close();
+
+    canvas.drawPath(outline, line);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CornerPainter oldDelegate) {
+    return oldDelegate.points != points;
   }
 }
