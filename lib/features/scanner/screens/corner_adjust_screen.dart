@@ -166,9 +166,11 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
                           rect.top + _points[i].dy * rect.height,
                         ),
                         onPanUpdate: (DragUpdateDetails details) {
-                          final Offset canvasPoint =
-                              _toCanvas(_points[i], rect) +
-                                  details.delta;
+                          final Offset canvasPoint = Offset(
+                            rect.left + _points[i].dx * rect.width,
+                            rect.top + _points[i].dy * rect.height,
+                          ) +
+                              details.delta;
 
                           final Offset imagePoint =
                               _fromCanvas(canvasPoint, rect);
@@ -234,16 +236,6 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
     return Alignment.center.inscribe(
       fitted.destination,
       Offset.zero & viewport,
-    );
-  }
-
-  Offset _toCanvas(
-    Offset normalized,
-    Rect rect,
-  ) {
-    return Offset(
-      rect.left + normalized.dx * rect.width,
-      rect.top + normalized.dy * rect.height,
     );
   }
 
