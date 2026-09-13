@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,8 @@ class LiveDocumentCameraScreen extends StatefulWidget {
 
 class _LiveDocumentCameraScreenState extends State<LiveDocumentCameraScreen> {
   final ImagePicker _picker = ImagePicker();
+  static const _scannerChannel =
+      MethodChannel('com.hameed.pdfmastertools/scanner');
   CameraController? _controller;
   List<CameraDescription> _cameras = const [];
   int _cameraIndex = 0;
@@ -26,6 +29,15 @@ class _LiveDocumentCameraScreenState extends State<LiveDocumentCameraScreen> {
   bool _flash = false;
   bool _autoScan = true;
   bool _idMode = false;
+  Timer? _autoTimer;
+  bool _autoBusy = false;
+  bool _streamStarted = false;
+  bool _frameBusy = false;
+  DateTime? _lastFrameAt;
+  List<dynamic>? _liveCorners;
+  List<dynamic>? _previousCorners;
+  int _stableFrames = 0;
+  String _liveStatus = 'Align the document inside the frame';
   String? _error;
 
   @override
@@ -53,13 +65,22 @@ class _LiveDocumentCameraScreenState extends State<LiveDocumentCameraScreen> {
         cameras[_cameraIndex],
         ResolutionPreset.veryHigh,
         enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.jpeg,
+        imageFormatGroup: ImageFormatGroup.nv21,
       );
       _controller = next;
       await old?.dispose();
       await next.initialize();
       await next.setFlashMode(FlashMode.off);
-      if (mounted) setState(() => _initializing = false);
+      if (mounted) {
+        setState(() {
+          _initializing = false;
+          _liveStatus = 'Align the document inside the frame';
+          _liveCorners = null;
+          _previousCorners = null;
+          _stableFrames = 0;
+        });
+      }
+      await _startLiveDetection();
     } on CameraException catch (e) {
       if (mounted) {
         setState(() {
@@ -79,12 +100,25 @@ class _LiveDocumentCameraScreenState extends State<LiveDocumentCameraScreen> {
 
   Future<void> _capture() async {
     final controller = _controller;
-    if (_capturing || controller == null || !controller.value.isInitialized || controller.value.isTakingPicture) return;
+    if (_capturing ||
+        controller == null ||
+        !controller.value.isInitialized ||
+        controller.value.isTakingPicture) {
+      return;
+    }
+
     setState(() => _capturing = true);
     HapticFeedback.mediumImpact();
+
     try {
+      await _stopLiveDetection();
+
       final file = await controller.takePicture();
-      if (mounted) Navigator.of(context).pop(file);
+      final processed = await _detectAndCrop(file);
+
+      if (mounted) {
+        Navigator.of(context).pop(processed);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -96,7 +130,273 @@ class _LiveDocumentCameraScreenState extends State<LiveDocumentCameraScreen> {
     }
   }
 
+  Future<XFile> _detectAndCrop(XFile file) async {
+    try {
+      final detected =
+          await _scannerChannel.invokeMethod<List<dynamic>>(
+        'detectDocument',
+        {'path': file.path},
+      );
+
+      if (detected == null || detected.length != 4) {
+        return file;
+      }
+
+      final points = detected.map((p) {
+        return {
+          'x': (p['x'] as num).toDouble(),
+          'y': (p['y'] as num).toDouble(),
+        };
+      }).toList();
+
+      final output =
+          await _scannerChannel.invokeMethod<String>(
+        'perspectiveCrop',
+        {
+          'path': file.path,
+          'points': points,
+        },
+      );
+
+      return output == null ? file : XFile(output);
+    } catch (_) {
+      return file;
+    }
+  }
+
+  double _documentArea(List<dynamic> points) {
+    if (points.length != 4) return 0;
+
+    double area = 0;
+    for (var i = 0; i < 4; i++) {
+      final a = points[i];
+      final b = points[(i + 1) % 4];
+      final ax = (a['x'] as num).toDouble();
+      final ay = (a['y'] as num).toDouble();
+      final bx = (b['x'] as num).toDouble();
+      final by = (b['y'] as num).toDouble();
+      area += ax * by - bx * ay;
+    }
+
+    return area.abs() / 2;
+  }
+
+  Future<void> _startLiveDetection() async {
+    final controller = _controller;
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        _streamStarted ||
+        !_autoScan) {
+      return;
+    }
+
+    try {
+      await controller.startImageStream(_processLiveFrame);
+      _streamStarted = true;
+    } catch (_) {
+      _streamStarted = false;
+      if (mounted) {
+        setState(() {
+          _liveStatus = 'Live detection unavailable — use the shutter';
+        });
+      }
+    }
+  }
+
+  Future<void> _stopLiveDetection() async {
+    final controller = _controller;
+    if (controller == null) return;
+
+    if (controller.value.isStreamingImages) {
+      try {
+        await controller.stopImageStream();
+      } catch (_) {}
+    }
+
+    _streamStarted = false;
+    _frameBusy = false;
+  }
+
+  Future<void> _processLiveFrame(CameraImage image) async {
+    if (!_autoScan ||
+        _autoBusy ||
+        _capturing ||
+        !_streamStarted ||
+        _frameBusy ||
+        _initializing) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final last = _lastFrameAt;
+    if (last != null &&
+        now.difference(last) < const Duration(milliseconds: 220)) {
+      return;
+    }
+
+    if (image.planes.isEmpty) return;
+
+    _lastFrameAt = now;
+    _frameBusy = true;
+
+    try {
+      final bytes = image.planes.first.bytes;
+
+      final detected =
+          await _scannerChannel.invokeMethod<List<dynamic>>(
+        'detectDocumentFrame',
+        {
+          'bytes': bytes,
+          'width': image.width,
+          'height': image.height,
+          'rotation': _controller?.description.sensorOrientation ?? 0,
+        },
+      );
+
+      if (detected != null && detected.length == 4) {
+        final area = _documentArea(detected);
+        final stable = _isStableCorners(detected);
+
+        if (mounted) {
+          setState(() {
+            _liveCorners = detected;
+            _liveStatus = area >= 0.18
+                ? (!_isInsideScanFrame(detected)
+                    ? 'Keep the whole document inside the frame'
+                    : (stable
+                        ? 'Hold steady… scanning'
+                        : 'Document detected — hold steady'))
+                : 'Move closer to the document';
+          });
+        }
+
+        final insideFrame = _isInsideScanFrame(detected);
+
+        if (stable && insideFrame && area >= 0.14) {
+          _stableFrames++;
+        } else {
+          _stableFrames = 0;
+        }
+
+        // Require several consecutive stable frames before auto capture.
+        // This prevents accidental captures while the phone is moving.
+        if (_stableFrames >= 7) {
+          await _performLiveCapture();
+        }
+      } else {
+        _stableFrames = 0;
+        if (mounted) {
+          setState(() {
+            _liveCorners = null;
+            _liveStatus = 'Align the document inside the frame';
+          });
+        }
+      }
+    } catch (_) {
+      // Live detection is intentionally silent.
+    } finally {
+      _frameBusy = false;
+    }
+  }
+
+  bool _isInsideScanFrame(List<dynamic> points) {
+    if (points.length != 4) return false;
+
+    // Keep the detected document safely inside the visible scanning area.
+    // A small margin avoids capturing table edges or objects touching the
+    // extreme borders of the camera preview.
+    for (final point in points) {
+      final x = (point['x'] as num).toDouble();
+      final y = (point['y'] as num).toDouble();
+
+      if (x < 0.035 || x > 0.965 || y < 0.035 || y > 0.965) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  bool _isStableCorners(List<dynamic> points) {
+    final previous = _previousCorners;
+    _previousCorners = points;
+
+    if (previous == null || previous.length != 4) return false;
+
+    double total = 0;
+
+    for (var i = 0; i < 4; i++) {
+      final a = previous[i];
+      final b = points[i];
+
+      final dx =
+          (a['x'] as num).toDouble() - (b['x'] as num).toDouble();
+      final dy =
+          (a['y'] as num).toDouble() - (b['y'] as num).toDouble();
+
+      total += (dx * dx + dy * dy);
+    }
+
+    return (total / 4) < 0.0012;
+  }
+
+  Future<void> _performLiveCapture() async {
+    if (_autoBusy || _capturing) return;
+
+    _autoBusy = true;
+    _capturing = true;
+
+    try {
+      await _stopLiveDetection();
+
+      final controller = _controller;
+      if (controller == null ||
+          !controller.value.isInitialized ||
+          controller.value.isTakingPicture) {
+        return;
+      }
+
+      HapticFeedback.mediumImpact();
+
+      final file = await controller.takePicture();
+      final processed = await _detectAndCrop(file);
+
+      if (mounted) {
+        Navigator.of(context).pop(processed);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _liveStatus = 'Could not scan — try again';
+          _stableFrames = 0;
+        });
+      }
+    } finally {
+      _autoBusy = false;
+      _capturing = false;
+    }
+  }
+
+  Future<void> _setAutoScan(bool value) async {
+    setState(() {
+      _autoScan = value;
+      _stableFrames = 0;
+      _liveCorners = null;
+      _previousCorners = null;
+      _liveStatus = value
+          ? 'Align the document inside the frame'
+          : 'Manual capture mode';
+    });
+
+    if (value) {
+      await _startLiveDetection();
+    } else {
+      await _stopLiveDetection();
+    }
+  }
+
   Future<void> _pickFromGallery() async {
+    await _stopLiveDetection();
     final file = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 100);
     if (file != null && mounted) Navigator.of(context).pop(file);
   }
@@ -125,6 +425,10 @@ class _LiveDocumentCameraScreenState extends State<LiveDocumentCameraScreen> {
 
   @override
   void dispose() {
+    _autoTimer?.cancel();
+    if (_controller?.value.isStreamingImages == true) {
+      unawaited(_controller!.stopImageStream());
+    }
     unawaited(_controller?.dispose());
     super.dispose();
   }
@@ -147,6 +451,16 @@ class _LiveDocumentCameraScreenState extends State<LiveDocumentCameraScreen> {
           if (ready) ...[
             const _ScannerTopGradient(),
             const _ScannerBottomGradient(),
+            if (_liveCorners != null)
+              IgnorePointer(
+                child: CustomPaint(
+                  painter: _LiveDocumentPainter(
+                    corners: _liveCorners!,
+                    stable: _stableFrames >= 4,
+                    cameraAspectRatio: controller.value.aspectRatio,
+                  ),
+                ),
+              ),
             SafeArea(
               child: Column(
                 children: [
@@ -170,62 +484,132 @@ class _LiveDocumentCameraScreenState extends State<LiveDocumentCameraScreen> {
                       ],
                     ),
                   ),
-                  const Spacer(),
-                  _ScanFrame(idMode: _idMode),
-                  const Spacer(),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-                    child: Column(
-                      children: [
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 180),
-                          child: _idMode
-                              ? const _DetectionHint(key: ValueKey('id'), text: 'Align the ID card inside the frame')
-                              : _autoScan
-                                  ? const _DetectionHint(key: ValueKey('auto'), text: 'Move closer • Auto scan when the page is ready')
-                                  : const _DetectionHint(key: ValueKey('manual'), text: 'Place the whole document inside the frame'),
+                  Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final frameWidth =
+                                constraints.maxWidth.clamp(250.0, 430.0);
+                            final maxFrameHeight =
+                                (constraints.maxHeight * .72).clamp(220.0, 560.0);
+
+                            return ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: frameWidth,
+                                maxHeight: maxFrameHeight,
+                              ),
+                              child: AspectRatio(
+                                aspectRatio: _idMode ? 1.586 : .707,
+                                child: _ScanFrame(idMode: _idMode),
+                              ),
+                            );
+                          },
                         ),
-                        const SizedBox(height: 16),
-                        _ModeSelector(
-                          idMode: _idMode,
-                          autoScan: _autoScan,
-                          onDocument: () => setState(() => _idMode = false),
-                          onId: () => setState(() => _idMode = true),
-                          onAutoChanged: (value) => setState(() => _autoScan = value),
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(child: _BottomTool(icon: Icons.photo_library_outlined, label: 'Gallery', onTap: _pickFromGallery)),
-                            Expanded(
-                              child: Center(
-                                child: GestureDetector(
-                                  onTap: _capture,
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 120),
-                                    width: _capturing ? 72 : 78,
-                                    height: _capturing ? 72 : 78,
-                                    padding: const EdgeInsets.all(6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: .98),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.white.withValues(alpha: .75), width: 3),
-                                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .35), blurRadius: 18)],
-                                    ),
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.black.withValues(alpha: .16), width: 1.5),
+                      ),
+                    ),
+                  ),
+                  SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            child: _idMode
+                                ? const _DetectionHint(
+                                    key: ValueKey('id'),
+                                    text: 'Align the ID card inside the frame',
+                                  )
+                                : _autoScan
+                                    ? _DetectionHint(
+                                        key: const ValueKey('auto'),
+                                        text: _liveStatus,
+                                      )
+                                    : const _DetectionHint(
+                                        key: ValueKey('manual'),
+                                        text: 'Place the whole document inside the frame',
+                                      ),
+                          ),
+                          const SizedBox(height: 10),
+                          _ModeSelector(
+                            idMode: _idMode,
+                            autoScan: _autoScan,
+                            onDocument: () =>
+                                setState(() => _idMode = false),
+                            onId: () => setState(() => _idMode = true),
+                            onAutoChanged: _setAutoScan,
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            height: 92,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _BottomTool(
+                                    icon: Icons.photo_library_outlined,
+                                    label: 'Gallery',
+                                    onTap: _pickFromGallery,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Center(
+                                    child: GestureDetector(
+                                      onTap: _capture,
+                                      child: AnimatedContainer(
+                                        duration:
+                                            const Duration(milliseconds: 120),
+                                        width: _capturing ? 72 : 78,
+                                        height: _capturing ? 72 : 78,
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white
+                                              .withValues(alpha: .98),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white
+                                                .withValues(alpha: .75),
+                                            width: 3,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black
+                                                  .withValues(alpha: .35),
+                                              blurRadius: 18,
+                                            ),
+                                          ],
+                                        ),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.black
+                                                  .withValues(alpha: .16),
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
+                                Expanded(
+                                  child: _BottomTool(
+                                    icon: Icons.document_scanner_outlined,
+                                    label: 'Auto',
+                                    active: _autoScan,
+                                    onTap: () =>
+                                        _setAutoScan(!_autoScan),
+                                  ),
+                                ),
+                              ],
                             ),
-                            Expanded(child: _BottomTool(icon: Icons.document_scanner_outlined, label: 'Auto', active: _autoScan, onTap: () => setState(() => _autoScan = !_autoScan))),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -240,260 +624,130 @@ class _LiveDocumentCameraScreenState extends State<LiveDocumentCameraScreen> {
 
 class _ImmersiveCameraPreview extends StatelessWidget {
   final CameraController controller;
+
   const _ImmersiveCameraPreview({required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final size = constraints.biggest;
-        final cameraRatio = controller.value.aspectRatio;
-        final screenRatio = size.width / size.height;
-        final scale = cameraRatio < screenRatio ? screenRatio / cameraRatio : cameraRatio / screenRatio;
-        return ClipRect(
-          child: Transform.scale(
-            scale: scale,
-            child: Center(child: CameraPreview(controller)),
-          ),
-        );
-      },
+    return ColoredBox(
+      color: Colors.black,
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: controller.value.aspectRatio,
+          child: CameraPreview(controller),
+        ),
+      ),
     );
   }
 }
 
-class _ScanFrame extends StatelessWidget {
-  final bool idMode;
-  const _ScanFrame({required this.idMode});
+class _LiveDocumentPainter extends CustomPainter {
+  final List<dynamic> corners;
+  final bool stable;
+  final double cameraAspectRatio;
 
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: MediaQuery.sizeOf(context).width * .84,
-      height: idMode ? MediaQuery.sizeOf(context).width * .53 : MediaQuery.sizeOf(context).height * .53,
-      child: CustomPaint(painter: _ScanFramePainter(idMode: idMode)),
-    );
-  }
-}
-
-class _ScanFramePainter extends CustomPainter {
-  final bool idMode;
-  const _ScanFramePainter({required this.idMode});
+  const _LiveDocumentPainter({
+    required this.corners,
+    required this.stable,
+    required this.cameraAspectRatio,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(idMode ? 20 : 18));
-    final shade = Paint()..color = Colors.black.withValues(alpha: .20);
-    final outside = Path()
-      ..addRect(Offset.zero & size)
-      ..addRRect(rect)
-      ..fillType = PathFillType.evenOdd;
-    canvas.drawPath(outside, shade);
+    if (corners.length != 4) return;
 
-    final border = Paint()
-      ..color = Colors.white.withValues(alpha: .62)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4;
-    canvas.drawRRect(rect, border);
+    final screenRatio = size.width / size.height;
 
-    final corner = Paint()
-      ..color = Colors.white
+    double previewWidth;
+    double previewHeight;
+    double offsetX;
+    double offsetY;
+
+    if (screenRatio > cameraAspectRatio) {
+      previewHeight = size.height;
+      previewWidth = previewHeight * cameraAspectRatio;
+      offsetX = (size.width - previewWidth) / 2;
+      offsetY = 0;
+    } else {
+      previewWidth = size.width;
+      previewHeight = previewWidth / cameraAspectRatio;
+      offsetX = 0;
+      offsetY = (size.height - previewHeight) / 2;
+    }
+
+    final points = corners.map((p) {
+      final x = (p['x'] as num).toDouble().clamp(0.0, 1.0);
+      final y = (p['y'] as num).toDouble().clamp(0.0, 1.0);
+
+      return Offset(
+        offsetX + x * previewWidth,
+        offsetY + y * previewHeight,
+      );
+    }).toList();
+
+    final fill = Paint()
+      ..style = PaintingStyle.fill
+      ..color = Colors.white.withValues(
+        alpha: stable ? .10 : .05,
+      );
+
+    final line = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.5
-      ..strokeCap = StrokeCap.round;
-    const len = 30.0;
-    const r = 18.0;
-    final w = size.width;
-    final h = size.height;
-    final segments = <List<Offset>>[
-      [Offset(r, 0), Offset(len, 0)], [Offset(0, r), Offset(0, len)],
-      [Offset(w - r, 0), Offset(w - len, 0)], [Offset(w, r), Offset(w, len)],
-      [Offset(0, h - r), Offset(0, h - len)], [Offset(r, h), Offset(len, h)],
-      [Offset(w, h - r), Offset(w, h - len)], [Offset(w - r, h), Offset(w - len, h)],
-    ];
-    for (final pair in segments) {
-      canvas.drawLine(pair[0], pair[1], corner);
+      ..strokeWidth = stable ? 4 : 3
+      ..strokeCap = StrokeCap.round
+      ..color = stable ? Colors.greenAccent : Colors.white;
+
+    final path = Path()
+      ..moveTo(points[0].dx, points[0].dy)
+      ..lineTo(points[1].dx, points[1].dy)
+      ..lineTo(points[2].dx, points[2].dy)
+      ..lineTo(points[3].dx, points[3].dy)
+      ..close();
+
+    canvas.drawPath(path, fill);
+    canvas.drawPath(path, line);
+
+    final cornerPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round
+      ..color = stable ? Colors.greenAccent : Colors.white;
+
+    const len = 22.0;
+
+    for (var i = 0; i < 4; i++) {
+      final point = points[i];
+      final next = points[(i + 1) % 4];
+      final prev = points[(i + 3) % 4];
+
+      final v1 = next - point;
+      final v2 = prev - point;
+
+      final l1 = v1.distance;
+      final l2 = v2.distance;
+
+      if (l1 > 0 && l2 > 0) {
+        canvas.drawLine(
+          point,
+          point + v1 / l1 * len,
+          cornerPaint,
+        );
+
+        canvas.drawLine(
+          point,
+          point + v2 / l2 * len,
+          cornerPaint,
+        );
+      }
     }
   }
 
   @override
-  bool shouldRepaint(covariant _ScanFramePainter oldDelegate) => oldDelegate.idMode != idMode;
-}
-
-class _ModeSelector extends StatelessWidget {
-  final bool idMode;
-  final bool autoScan;
-  final VoidCallback onDocument;
-  final VoidCallback onId;
-  final ValueChanged<bool> onAutoChanged;
-
-  const _ModeSelector({
-    required this.idMode,
-    required this.autoScan,
-    required this.onDocument,
-    required this.onId,
-    required this.onAutoChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _ModeChip(label: 'Document', icon: Icons.description_outlined, selected: !idMode, onTap: onDocument),
-        const SizedBox(width: 8),
-        _ModeChip(label: 'ID Card', icon: Icons.badge_outlined, selected: idMode, onTap: onId),
-        const SizedBox(width: 10),
-        GestureDetector(
-          onTap: () => onAutoChanged(!autoScan),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: .48),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Colors.white.withValues(alpha: .20)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.auto_awesome_rounded, size: 17, color: autoScan ? Colors.white : Colors.white60),
-                const SizedBox(width: 6),
-                Text('Auto', style: TextStyle(color: autoScan ? Colors.white : Colors.white60, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
+  bool shouldRepaint(covariant _LiveDocumentPainter oldDelegate) {
+    return oldDelegate.corners != corners ||
+        oldDelegate.stable != stable ||
+        oldDelegate.cameraAspectRatio != cameraAspectRatio;
   }
-}
-
-class _ModeChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-  const _ModeChip({required this.label, required this.icon, required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-        decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.black.withValues(alpha: .48),
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 17, color: selected ? Colors.black87 : Colors.white),
-            const SizedBox(width: 6),
-            Text(label, style: TextStyle(color: selected ? Colors.black87 : Colors.white, fontWeight: FontWeight.w700)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DetectionHint extends StatelessWidget {
-  final String text;
-  const _DetectionHint({super.key, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-      decoration: BoxDecoration(color: Colors.black.withValues(alpha: .52), borderRadius: BorderRadius.circular(20)),
-      child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-    );
-  }
-}
-
-class _BottomTool extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-  const _BottomTool({required this.icon, required this.label, this.active = false, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: active ? Colors.white : Colors.white.withValues(alpha: .88), size: 27),
-          const SizedBox(height: 5),
-          Text(label, style: TextStyle(color: active ? Colors.white : Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-}
-
-class _GlassButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _GlassButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.black.withValues(alpha: .48),
-      shape: const CircleBorder(),
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(11),
-          child: Icon(icon, color: Colors.white, size: 21),
-        ),
-      ),
-    );
-  }
-}
-
-class _ScannerTopGradient extends StatelessWidget {
-  const _ScannerTopGradient();
-  @override
-  Widget build(BuildContext context) => IgnorePointer(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.center,
-              colors: [Colors.black.withValues(alpha: .62), Colors.transparent],
-            ),
-          ),
-        ),
-      );
-}
-
-class _ScannerBottomGradient extends StatelessWidget {
-  const _ScannerBottomGradient();
-  @override
-  Widget build(BuildContext context) => IgnorePointer(
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: FractionallySizedBox(
-            heightFactor: .48,
-            widthFactor: 1,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black.withValues(alpha: .88)],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
 }
 
 class _CameraLoading extends StatelessWidget {

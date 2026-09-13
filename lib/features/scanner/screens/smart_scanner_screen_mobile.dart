@@ -78,6 +78,58 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     await _setImage(file);
   }
 
+  Future<Uint8List> _processScanFile(XFile file) async {
+    final original = await File(file.path).readAsBytes();
+
+    if (!context.read<AppDataController>().autoDocumentDetection) {
+      final decoded = img.decodeImage(original);
+      if (decoded == null) return original;
+      return Uint8List.fromList(
+        img.encodeJpg(
+          decoded,
+          quality: _imageQuality(context),
+        ),
+      );
+    }
+
+    try {
+      final detected =
+          await _scannerChannel.invokeMethod<List<dynamic>>(
+        'detectDocument',
+        {'path': file.path},
+      );
+
+      if (detected == null || detected.length != 4) {
+        return original;
+      }
+
+      final points = detected.map((p) {
+        return {
+          'x': (p['x'] as num).toDouble(),
+          'y': (p['y'] as num).toDouble(),
+        };
+      }).toList();
+
+      final output =
+          await _scannerChannel.invokeMethod<String>(
+        'perspectiveCrop',
+        {
+          'path': file.path,
+          'points': points,
+        },
+      );
+
+      if (output != null) {
+        final cropped = await File(output).readAsBytes();
+        if (cropped.isNotEmpty) return cropped;
+      }
+    } catch (_) {
+      // Detection failure falls back to the original image.
+    }
+
+    return original;
+  }
+
   Future<void> _setImage(XFile file) async {
     setState(() {
       _image = file;
@@ -89,31 +141,34 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
       _savedDocumentId = null;
       _selectedPage = 0;
     });
-    final bytes = await File(file.path).readAsBytes();
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) {
-      if (mounted) setState(() => _processing = false);
-      return;
-    }
-    final jpg = img.encodeJpg(decoded, quality: _imageQuality(context));
-    List<Offset>? corners;
-    if (_image != null && context.read<AppDataController>().autoDocumentDetection) {
-      try {
-        final detected = await _scannerChannel.invokeMethod<List<dynamic>>('detectDocument', {'path': _image!.path});
-        corners = detected?.map((p) => Offset((p['x'] as num).toDouble(), (p['y'] as num).toDouble())).toList();
-      } catch (_) {}
-    }
-    if (!mounted) return;
-    setState(() {
-      _processed = Uint8List.fromList(jpg);
-      if (_pages.isEmpty) {
-        _pages.add(_processed!);
-      } else {
-        _pages[_selectedPage.clamp(0, _pages.length - 1)] = _processed!;
+
+    try {
+      final processed = await _processScanFile(file);
+
+      if (!mounted) return;
+
+      setState(() {
+        _processed = processed;
+
+        if (_pages.isEmpty) {
+          _pages.add(processed);
+        } else {
+          _pages[_selectedPage.clamp(0, _pages.length - 1)] = processed;
+        }
+
+        _corners = null;
+        _processing = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _processing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not process this document image.'),
+          ),
+        );
       }
-      _corners = corners?.length == 4 ? corners : null;
-      _processing = false;
-    });
+    }
   }
 
   /// Opens the full-screen manual corner-adjustment step for [index], then
@@ -250,38 +305,85 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
   }
 
   Future<void> _addGalleryPages() async {
-    final files = await _picker.pickMultiImage(imageQuality: _imageQuality(context), maxWidth: _maxWidth(context));
+    final files = await _picker.pickMultiImage(
+      imageQuality: _imageQuality(context),
+      maxWidth: _maxWidth(context),
+    );
+
     if (files.isEmpty) return;
+
     setState(() => _processing = true);
+
     try {
       for (final file in files) {
-        final bytes = await File(file.path).readAsBytes();
-        final decoded = img.decodeImage(bytes);
-        if (decoded == null) continue;
-        final jpg = Uint8List.fromList(img.encodeJpg(decoded, quality: _imageQuality(context)));
-        _pages.add(jpg);
+        final processed = await _processScanFile(file);
+
+        if (processed.isNotEmpty) {
+          _pages.add(processed);
+        }
       }
+
       if (_pages.isNotEmpty) {
         _selectedPage = _pages.length - 1;
         _processed = _pages[_selectedPage];
         _image = null;
         _corners = null;
       }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Some gallery pages could not be processed.'),
+          ),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _processing = false);
+      if (mounted) {
+        setState(() => _processing = false);
+      }
     }
   }
 
   Future<void> _addPage() async {
     final file = await Navigator.of(context).push<XFile>(
-      MaterialPageRoute(builder: (_) => const LiveDocumentCameraScreen()),
+      MaterialPageRoute(
+        builder: (_) => const LiveDocumentCameraScreen(),
+      ),
     );
+
     if (file == null) return;
-    final bytes = await File(file.path).readAsBytes();
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) return;
-    final jpg = Uint8List.fromList(img.encodeJpg(decoded, quality: _imageQuality(context)));
-    setState(() { _pages.add(jpg); _selectedPage = _pages.length - 1; _image = file; _processed = jpg; _corners = null; });
+
+    try {
+      final bytes = await File(file.path).readAsBytes();
+      final decoded = img.decodeImage(bytes);
+
+      if (decoded == null) return;
+
+      final jpg = Uint8List.fromList(
+        img.encodeJpg(
+          decoded,
+          quality: _imageQuality(context),
+        ),
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _pages.add(jpg);
+        _selectedPage = _pages.length - 1;
+        _image = file;
+        _processed = jpg;
+        _corners = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not add the scanned page.'),
+          ),
+        );
+      }
+    }
   }
 
   void _deletePage(int index) {
@@ -407,19 +509,20 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
       img.adjustColor(decoded, contrast: 1.22, brightness: 1.04, saturation: 0.92);
     }
     final jpg = img.encodeJpg(decoded, quality: 94);
-    List<Offset>? corners;
-    if (_image != null) {
-      try {
-        final detected = await _scannerChannel.invokeMethod<List<dynamic>>('detectDocument', {'path': _image!.path});
-        corners = detected?.map((p) => Offset((p['x'] as num).toDouble(), (p['y'] as num).toDouble())).toList();
-      } catch (_) {}
-    }
+
     if (!mounted) return;
+
     setState(() {
       _processed = Uint8List.fromList(jpg);
-      if (_pages.isEmpty) { _pages.add(_processed!); _selectedPage = 0; }
-      else _pages[_selectedPage] = _processed!;
-      _corners = corners?.length == 4 ? corners : null;
+
+      if (_pages.isEmpty) {
+        _pages.add(_processed!);
+        _selectedPage = 0;
+      } else {
+        _pages[_selectedPage] = _processed!;
+      }
+
+      _corners = null;
       _processing = false;
     });
   }
