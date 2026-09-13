@@ -483,7 +483,7 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     }
   }
 
-  Future<void> _addPage()  Future<void> _addPage() async {
+  Future<void> _addPage() async {
     final file = await Navigator.of(context).push<XFile>(
       MaterialPageRoute(
         builder: (_) =>
@@ -546,7 +546,7 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     }
   }
 
-  void _deletePage  void _deletePage(int index) {
+  void _deletePage(int index) {
     if (index < 0 ||
         index >= _pages.length ||
         _pages.length <= 1) {
@@ -572,7 +572,7 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     });
   }
 
-  void _duplicatePage  void _duplicatePage(int index) {
+  void _duplicatePage(int index) {
     if (index < 0 ||
         index >= _pages.length ||
         index >= _pageEdits.length) {
@@ -603,7 +603,7 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     });
   }
 
-  void _movePage  void _movePage(
+  void _movePage(
     int oldIndex,
     int newIndex,
   ) {
@@ -648,7 +648,7 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     });
   }
 
-  void _selectPage  void _selectPage(int index) {
+  void _selectPage(int index) {
     if (index < 0 ||
         index >= _pages.length ||
         index >= _pageEdits.length) {
@@ -663,7 +663,64 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     });
   }
 
-  Future<void> _applyAdjustments  Future<void> _applyAdjustments() async {
+  Uint8List _renderPageBytes(int index) {
+    final edit = _pageEdits[index];
+    final decoded = img.decodeImage(edit.original);
+
+    if (decoded == null) {
+      return Uint8List.fromList(edit.original);
+    }
+
+    switch (edit.filter) {
+      case 1:
+        img.grayscale(decoded);
+        break;
+      case 2:
+        img.grayscale(decoded);
+        img.adjustColor(
+          decoded,
+          contrast: 1.35,
+          brightness: 1.05,
+        );
+        break;
+      case 3:
+        img.grayscale(decoded);
+        img.adjustColor(
+          decoded,
+          contrast: 1.75,
+          brightness: 1.08,
+        );
+        img.convolution(
+          decoded,
+          filter: const [
+            0, -1, 0,
+            -1, 5, -1,
+            0, -1, 0,
+          ],
+        );
+        break;
+      case 4:
+        img.adjustColor(
+          decoded,
+          contrast: 1.22,
+          brightness: 1.04,
+          saturation: 0.92,
+        );
+        break;
+    }
+
+    img.adjustColor(
+      decoded,
+      brightness: edit.brightness,
+      contrast: edit.contrast,
+    );
+
+    return Uint8List.fromList(
+      img.encodeJpg(decoded, quality: 95),
+    );
+  }
+
+  Future<void> _applyAdjustments() async {
     if (_pageEdits.isEmpty ||
         _selectedPage >= _pageEdits.length) {
       return;
@@ -769,7 +826,7 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     }
   }
 
-  Future<void> _applyFilter  Future<void> _applyFilter(int filter) async {
+  Future<void> _applyFilter(int filter) async {
     if (_pageEdits.isEmpty ||
         _selectedPage >= _pageEdits.length) {
       return;

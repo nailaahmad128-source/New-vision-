@@ -280,7 +280,7 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
     Rect base,
     Size viewport,
   ) {
-    final center = viewport.center;
+    final center = viewport.center(Offset.zero);
 
     return Rect.fromLTRB(
       center.dx +
@@ -328,7 +328,7 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
     Rect base,
     Size viewport,
   ) {
-    final center = viewport.center;
+    final center = viewport.center(Offset.zero);
 
     final unscaled = Offset(
       center.dx +
