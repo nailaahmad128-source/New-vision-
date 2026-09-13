@@ -6,9 +6,7 @@ import '../../../core/constants/tools_catalog.dart';
 import '../../../core/services/conversion/conversion_service.dart';
 import '../../../core/services/conversion/conversion_types.dart';
 import '../../../core/services/file_storage_service.dart';
-import '../../../core/storage/app_data_controller.dart';
 import '../../../core/widgets/empty_state.dart';
-import '../../settings/screens/settings_screen.dart';
 import '../widgets/source_picker.dart';
 import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
@@ -43,7 +41,6 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
   bool _working = false;
   ConversionPhase? _phase;
   String? _error;
-  bool _errorIsConfig = false;
 
   @override
   void initState() {
@@ -70,13 +67,11 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
     setState(() {
       _working = true;
       _error = null;
-      _errorIsConfig = false;
       _phase = ConversionPhase.uploading;
     });
     try {
-      final appData = context.read<AppDataController>();
       final storage = context.read<FileStorageService>();
-      final provider = resolveConversionProvider(appData);
+      final provider = resolveConversionProvider();
       final baseName = p.basenameWithoutExtension(path);
       final outName = '$baseName${widget.targetFormat.fileExtension}';
 
@@ -108,7 +103,6 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
       if (!mounted) return;
       setState(() {
         _error = e.message;
-        _errorIsConfig = e.isConfigurationError;
       });
     } catch (e) {
       if (!mounted) return;
@@ -122,9 +116,9 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
   }
 
   String _phaseLabel(ConversionPhase phase) => switch (phase) {
-        ConversionPhase.uploading => 'Uploading document…',
-        ConversionPhase.converting => 'Converting…',
-        ConversionPhase.downloading => 'Downloading result…',
+        ConversionPhase.uploading => 'Preparing…',
+        ConversionPhase.converting => 'Converting on device…',
+        ConversionPhase.downloading => 'Saving result…',
       };
 
   @override
@@ -141,10 +135,10 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
                   Padding(
                     padding: const EdgeInsets.only(top: 24),
                     child: EmptyState(
-                      icon: Icons.cloud_sync_rounded,
+                      icon: Icons.offline_bolt_rounded,
                       title: 'Choose a ${widget.sourceFormat.displayName} file',
                       message:
-                          'Converted using a secure cloud conversion service — the file is uploaded only for this conversion and isn\'t kept afterwards.',
+                          'Converted directly on your device. No API key or cloud upload is required.',
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -183,14 +177,11 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
                     children: [
                       Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
                       const SizedBox(height: 10),
-                      if (_errorIsConfig)
-                        FilledButton.icon(
-                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
-                          icon: const Icon(Icons.settings_rounded),
-                          label: const Text('Open Settings'),
-                        )
-                      else
-                        OutlinedButton.icon(onPressed: _convert, icon: const Icon(Icons.refresh_rounded), label: const Text('Retry')),
+                      OutlinedButton.icon(
+                        onPressed: _convert,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Retry'),
+                      ),
                     ],
                   ),
                 ),

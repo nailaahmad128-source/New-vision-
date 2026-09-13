@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 1.0.8+12
 
 environment:
-  sdk: '>=3.4.0 <4.0.0'
+  sdk: '>=3.10.0 <4.0.0'
   flutter: ">=3.38.0"
 
 dependencies:
@@ -76,6 +76,10 @@ dependencies:
 
   # Ads
   google_mobile_ads: ^9.0.0
+
+  # Local Office document generation — no API key required
+  open_xml: ^0.3.1
+  file: ^7.0.1
 
   # Cloud document conversion (PDF <-> Word/Excel/PowerPoint) — provider is
   # swappable at the app layer; see lib/core/services/conversion/.

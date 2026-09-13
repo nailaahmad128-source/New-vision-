@@ -330,30 +330,6 @@ class AppDataController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---------------- Cloud document conversion ----------------
-  // See lib/core/services/conversion/ — the app never assumes a specific
-  // vendor beyond this configuration; conversion_service.dart is the only
-  // place that reads conversionProviderId to pick an implementation.
-
-  String get conversionProviderId =>
-      _prefsBox.get('conversion_provider_id', defaultValue: 'cloudconvert') as String;
-
-  Future<void> setConversionProviderId(String value) async {
-    await _prefsBox.put('conversion_provider_id', value);
-    notifyListeners();
-  }
-
-  String? get cloudConvertApiKey => _prefsBox.get('cloudconvert_api_key') as String?;
-
-  Future<void> setCloudConvertApiKey(String? value) async {
-    final trimmed = (value ?? '').trim();
-    if (trimmed.isEmpty) {
-      await _prefsBox.delete('cloudconvert_api_key');
-    } else {
-      await _prefsBox.put('cloudconvert_api_key', trimmed);
-    }
-    notifyListeners();
-  }
 
   bool get onboardingComplete => _prefsBox.get('onboarding_complete', defaultValue: false) as bool;
   Future<void> setOnboardingComplete() async {
