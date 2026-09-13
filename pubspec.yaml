@@ -27,7 +27,7 @@ dependencies:
   syncfusion_flutter_pdfviewer: ^34.1.33
   # Explicit dependency (not just transitive) since main.dart calls
   # SyncfusionLicense.registerLicense() directly — see AppConfig.
-  syncfusion_flutter_core: ^34.1.33
+  syncfusion_flutter_core: ^33.2.12
   # Rasterizing PDF pages <-> images (PDF to Image, thumbnails, compression re-encode)
   printing: ^5.13.1
   pdf: ^3.11.1
