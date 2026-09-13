@@ -18,7 +18,7 @@ Future<List<String>> pickSourceFiles(
   if (result == null) return [];
 
   final paths = <String>[];
-  for (final f in result) {
+  for (final f in result.files) {
     if (f.path != null) {
       paths.add(f.path!);
     }

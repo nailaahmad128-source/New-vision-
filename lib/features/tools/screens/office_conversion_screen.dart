@@ -86,7 +86,8 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
         },
       );
 
-      final doc = await appData.registerToolResult(
+      final data = context.read<AppDataController>();
+    final doc = await data.registerToolResult(
         tmpFile: file,
         fileName: outName,
         toolId: widget.toolId.name,
