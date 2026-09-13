@@ -775,14 +775,6 @@ class _CameraLoading extends StatelessWidget {
     );
   }
 }
-            scale: scale,
-            child: Center(child: CameraPreview(controller)),
-          ),
-        );
-      },
-    );
-  }
-}
 
 class _ScanFrame extends StatelessWidget {
   final bool idMode;
@@ -1011,3 +1003,10 @@ class _ScannerBottomGradient extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [Colors.transparent, Colors.black.withValues(alpha: .88)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+}
