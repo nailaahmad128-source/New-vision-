@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -45,6 +46,12 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
   bool _ready = false;
   bool _detecting = false;
   int? _activeHandle;
+
+  double _zoom = 1.0;
+  Offset _pan = Offset.zero;
+  double _gestureStartZoom = 1.0;
+  Offset _gestureStartPan = Offset.zero;
+  Offset _gestureStartFocal = Offset.zero;
 
   static List<Offset> _defaultRect() => const [
         Offset(0.08, 0.08),
@@ -104,7 +111,13 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _reset() => setState(() => _corners = _defaultRect());
+  void _reset() {
+    setState(() {
+      _corners = _defaultRect();
+      _zoom = 1.0;
+      _pan = Offset.zero;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,17 +165,83 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
                             (_imgW ?? 3).toDouble(),
                             (_imgH ?? 4).toDouble(),
                           );
+
+                          final displayRect = _transformedRect(
+                            imageRect,
+                            constraints.biggest,
+                          );
+
                           return Stack(
+                            clipBehavior: Clip.none,
                             children: [
                               Positioned.fromRect(
-                                rect: imageRect,
-                                child: Image.memory(widget.imageBytes, fit: BoxFit.fill),
+                                rect: displayRect,
+                                child: Image.memory(
+                                  widget.imageBytes,
+                                  fit: BoxFit.fill,
+                                ),
                               ),
-                              CustomPaint(
-                                size: constraints.biggest,
-                                painter: _CornerLinesPainter(_toPixels(imageRect)),
+
+                              // Zoom + pan layer. Corner handles stay above it.
+                              Positioned.fill(
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.translucent,
+                                  onScaleStart: (details) {
+                                    _gestureStartZoom = _zoom;
+                                    _gestureStartPan = _pan;
+                                    _gestureStartFocal = details.focalPoint;
+                                  },
+                                  onScaleUpdate: (details) {
+                                    final nextZoom = (
+                                      _gestureStartZoom * details.scale
+                                    ).clamp(1.0, 4.0);
+
+                                    final delta =
+                                        details.focalPoint -
+                                        _gestureStartFocal;
+
+                                    final nextPan = _clampPan(
+                                      _gestureStartPan + delta,
+                                      imageRect,
+                                      constraints.biggest,
+                                      nextZoom,
+                                    );
+
+                                    setState(() {
+                                      _zoom = nextZoom;
+                                      _pan = nextPan;
+                                    });
+                                  },
+                                  onDoubleTap: () {
+                                    setState(() {
+                                      if (_zoom > 1.05) {
+                                        _zoom = 1.0;
+                                        _pan = Offset.zero;
+                                      } else {
+                                        _zoom = 2.0;
+                                        _pan = Offset.zero;
+                                      }
+                                    });
+                                  },
+                                ),
                               ),
-                              for (var i = 0; i < 4; i++) _handle(i, imageRect),
+
+                              IgnorePointer(
+                                child: CustomPaint(
+                                  size: constraints.biggest,
+                                  painter: _CornerLinesPainter(
+                                    _toPixels(displayRect),
+                                  ),
+                                ),
+                              ),
+
+                              for (var i = 0; i < 4; i++)
+                                _handle(
+                                  i,
+                                  imageRect,
+                                  displayRect,
+                                  constraints.biggest,
+                                ),
                             ],
                           );
                         },
@@ -197,6 +276,81 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
     );
   }
 
+  Rect _transformedRect(
+    Rect base,
+    Size viewport,
+  ) {
+    final center = viewport.center;
+
+    return Rect.fromLTRB(
+      center.dx +
+          (base.left - center.dx) * _zoom +
+          _pan.dx,
+      center.dy +
+          (base.top - center.dy) * _zoom +
+          _pan.dy,
+      center.dx +
+          (base.right - center.dx) * _zoom +
+          _pan.dx,
+      center.dy +
+          (base.bottom - center.dy) * _zoom +
+          _pan.dy,
+    );
+  }
+
+  Offset _clampPan(
+    Offset pan,
+    Rect base,
+    Size viewport,
+    double zoom,
+  ) {
+    final scaledWidth = base.width * zoom;
+    final scaledHeight = base.height * zoom;
+
+    final maxX = math.max(
+      0.0,
+      (scaledWidth - viewport.width) / 2,
+    );
+
+    final maxY = math.max(
+      0.0,
+      (scaledHeight - viewport.height) / 2,
+    );
+
+    return Offset(
+      pan.dx.clamp(-maxX, maxX),
+      pan.dy.clamp(-maxY, maxY),
+    );
+  }
+
+  Offset _screenToNormalized(
+    Offset screenPoint,
+    Rect base,
+    Size viewport,
+  ) {
+    final center = viewport.center;
+
+    final unscaled = Offset(
+      center.dx +
+          (screenPoint.dx -
+                  center.dx -
+                  _pan.dx) /
+              _zoom,
+      center.dy +
+          (screenPoint.dy -
+                  center.dy -
+                  _pan.dy) /
+              _zoom,
+    );
+
+    return Offset(
+      ((unscaled.dx - base.left) / base.width)
+          .clamp(0.0, 1.0),
+      ((unscaled.dy - base.top) / base.height)
+          .clamp(0.0, 1.0),
+    );
+  }
+
   Rect _fitRect(Size bounds, double w, double h) {
     final scale = (bounds.width / w < bounds.height / h) ? bounds.width / w : bounds.height / h;
     final rw = w * scale;
@@ -210,38 +364,92 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
       .map((c) => Offset(imageRect.left + c.dx * imageRect.width, imageRect.top + c.dy * imageRect.height))
       .toList();
 
-  Widget _handle(int index, Rect imageRect) {
-    final px = imageRect.left + _corners[index].dx * imageRect.width;
-    final py = imageRect.top + _corners[index].dy * imageRect.height;
-    const handleSize = 36.0;
+  Widget _handle(
+    int index,
+    Rect baseRect,
+    Rect displayRect,
+    Size viewport,
+  ) {
+    Offset currentScreenPoint() {
+      return Offset(
+        displayRect.left +
+            _corners[index].dx * displayRect.width,
+        displayRect.top +
+            _corners[index].dy * displayRect.height,
+      );
+    }
+
+    const handleSize = 46.0;
+
     return Positioned(
-      left: px - handleSize / 2,
-      top: py - handleSize / 2,
+      left: currentScreenPoint().dx - handleSize / 2,
+      top: currentScreenPoint().dy - handleSize / 2,
       child: GestureDetector(
-        onPanStart: (_) => setState(() => _activeHandle = index),
-        onPanUpdate: (details) {
+        behavior: HitTestBehavior.opaque,
+
+        onPanStart: (_) {
           setState(() {
-            final currentPx = imageRect.left + _corners[index].dx * imageRect.width + details.delta.dx;
-            final currentPy = imageRect.top + _corners[index].dy * imageRect.height + details.delta.dy;
-            final dx = ((currentPx - imageRect.left) / imageRect.width).clamp(0.0, 1.0);
-            final dy = ((currentPy - imageRect.top) / imageRect.height).clamp(0.0, 1.0);
-            _corners[index] = Offset(dx, dy);
+            _activeHandle = index;
           });
         },
-        onPanEnd: (_) => setState(() => _activeHandle = null),
+
+        onPanUpdate: (details) {
+          final current = currentScreenPoint();
+
+          final target = Offset(
+            current.dx + details.delta.dx,
+            current.dy + details.delta.dy,
+          );
+
+          final next = _screenToNormalized(
+            target,
+            baseRect,
+            viewport,
+          );
+
+          setState(() {
+            _corners[index] = next;
+          });
+        },
+
+        onPanEnd: (_) {
+          setState(() {
+            _activeHandle = null;
+          });
+        },
+
         child: Container(
           width: handleSize,
           height: handleSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: (_activeHandle == index ? AppColors.brandPrimary : Colors.white).withValues(alpha: .92),
-            border: Border.all(color: Colors.black26, width: 2),
-            boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(0, 1))],
+            color: _activeHandle == index
+                ? AppColors.brandPrimary
+                : Colors.white,
+            border: Border.all(
+              color: Colors.black38,
+              width: 2,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black45,
+                blurRadius: 6,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(
+            Icons.open_with_rounded,
+            size: 22,
+            color: _activeHandle == index
+                ? Colors.white
+                : Colors.black54,
           ),
         ),
       ),
     );
   }
+
 }
 
 class _CornerLinesPainter extends CustomPainter {

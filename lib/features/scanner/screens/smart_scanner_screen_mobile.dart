@@ -33,11 +33,9 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
   XFile? _image;
   Uint8List? _processed;
   final List<Uint8List> _pages = [];
+  final List<_PageEdit> _pageEdits = [];
   bool _processing = false;
-  int _filter = 0;
   int _selectedPage = 0;
-  double _brightness = 1.0;
-  double _contrast = 1.0;
   List<Offset>? _corners;
   String? _savedDocumentId;
   static const _scannerChannel = MethodChannel('com.hameed.pdfmastertools/scanner');
@@ -134,12 +132,8 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     setState(() {
       _image = file;
       _processing = true;
-      _filter = 0;
-      _brightness = 1.0;
-      _contrast = 1.0;
-      _corners = null;
       _savedDocumentId = null;
-      _selectedPage = 0;
+      _corners = null;
     });
 
     try {
@@ -147,24 +141,49 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
 
       if (!mounted) return;
 
-      setState(() {
-        _processed = processed;
+      final bytes = Uint8List.fromList(processed);
 
+      setState(() {
         if (_pages.isEmpty) {
-          _pages.add(processed);
+          _pages.add(bytes);
+          _pageEdits.add(
+            _PageEdit(
+              original: Uint8List.fromList(bytes),
+            ),
+          );
+          _selectedPage = 0;
         } else {
-          _pages[_selectedPage.clamp(0, _pages.length - 1)] = processed;
+          final index = _selectedPage
+              .clamp(0, _pages.length - 1)
+              .toInt();
+
+          _pages[index] = bytes;
+
+          if (_pageEdits.length > index) {
+            _pageEdits[index] = _PageEdit(
+              original: Uint8List.fromList(bytes),
+            );
+          } else {
+            _pageEdits.add(
+              _PageEdit(
+                original: Uint8List.fromList(bytes),
+              ),
+            );
+          }
         }
 
-        _corners = null;
+        _processed = _pages[_selectedPage];
         _processing = false;
       });
     } catch (_) {
       if (mounted) {
         setState(() => _processing = false);
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Could not process this document image.'),
+            content: Text(
+              'Could not process this document image.',
+            ),
           ),
         );
       }
@@ -178,50 +197,122 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
   /// native crop channel operates on a file path.
   Future<void> _adjustCornersForPage(int index) async {
     if (index < 0 || index >= _pages.length) return;
-    final bytes = _pages[index];
-    final storage = context.read<FileStorageService>();
-    final tmp = await storage.newTmpFile('adjust_$index.jpg');
-    await tmp.writeAsBytes(bytes, flush: true);
-    if (!mounted) return;
-    final result = await Navigator.of(context).push<List<Offset>>(
-      MaterialPageRoute(
-        builder: (_) => CornerAdjustScreen(
-          imagePath: tmp.path,
-          imageBytes: bytes,
-          initialCorners: index == _selectedPage ? _corners : null,
-        ),
-      ),
-    );
-    if (result == null || result.length != 4 || !mounted) return;
-    setState(() => _processing = true);
+
     try {
-      final points = result.map((p) => {'x': p.dx, 'y': p.dy}).toList();
-      final output = await _scannerChannel.invokeMethod<String>('perspectiveCrop', {
-        'path': tmp.path,
-        'points': points,
-      });
-      if (output != null) {
-        final croppedBytes = await File(output).readAsBytes();
-        if (!mounted) return;
-        setState(() {
-          _pages[index] = croppedBytes;
-          if (index == _selectedPage) {
-            _processed = croppedBytes;
-            _image = XFile(output);
-            _corners = null;
-          }
-        });
+      final bytes = _pages[index];
+
+      final tempDir = await Directory.systemTemp.createTemp(
+        'pdf_master_corner_',
+      );
+
+      final imageFile = File(
+        p.join(
+          tempDir.path,
+          'page_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        ),
+      );
+
+      await imageFile.writeAsBytes(bytes, flush: true);
+
+      if (!mounted) return;
+
+      final result = await Navigator.of(context).push<List<Offset>>(
+        MaterialPageRoute(
+          builder: (_) => CornerAdjustScreen(
+            imagePath: imageFile.path,
+            imageBytes: bytes,
+            initialCorners: _corners,
+          ),
+        ),
+      );
+
+      if (!mounted || result == null || result.length != 4) {
+        return;
       }
-    } catch (_) {
+
+      final corners = result
+          .map(
+            (point) => <double>[
+              point.dx.clamp(0.0, 1.0),
+              point.dy.clamp(0.0, 1.0),
+            ],
+          )
+          .toList();
+
+      final croppedPath =
+          await _scannerChannel.invokeMethod<String>(
+        'perspectiveCrop',
+        <String, dynamic>{
+          'path': imageFile.path,
+          'corners': corners,
+        },
+      );
+
+      if (croppedPath == null || croppedPath.trim().isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Could not crop the selected document.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final croppedFile = File(croppedPath);
+
+      if (!await croppedFile.exists()) {
+        throw Exception('Cropped image file was not created.');
+      }
+
+      final croppedBytes = await croppedFile.readAsBytes();
+
+      if (croppedBytes.isEmpty) {
+        throw Exception('Cropped image is empty.');
+      }
+
+      setState(() {
+        _pages[index] = Uint8List.fromList(croppedBytes);
+
+        if (index < _pageEdits.length) {
+          _pageEdits[index] = _PageEdit(
+            original: Uint8List.fromList(croppedBytes),
+          );
+        }
+
+        _processed = Uint8List.fromList(croppedBytes);
+        _selectedPage = index;
+        _corners = null;
+      });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not crop the document to those corners.')),
+          const SnackBar(
+            content: Text('Document cropped successfully.'),
+            duration: Duration(seconds: 2),
+          ),
         );
       }
-    } finally {
-      if (mounted) setState(() => _processing = false);
+
+      try {
+        await imageFile.delete();
+      } catch (_) {}
+
+      try {
+        await croppedFile.delete();
+      } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Crop failed: $e'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
+
 
   Future<void> _showAddPageSheet() async {
     await showModalBottomSheet(
@@ -306,7 +397,7 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
 
   Future<void> _addGalleryPages() async {
     final files = await _picker.pickMultiImage(
-      imageQuality: _imageQuality(context),
+      imageQuality: 100,
       maxWidth: _maxWidth(context),
     );
 
@@ -314,26 +405,74 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
 
     setState(() => _processing = true);
 
+    int added = 0;
+
     try {
       for (final file in files) {
-        final processed = await _processScanFile(file);
+        try {
+          // IMPORTANT:
+          // Gallery images use the exact same document
+          // processing pipeline as scanned camera images.
+          final processed =
+              await _processScanFile(file);
 
-        if (processed.isNotEmpty) {
-          _pages.add(processed);
+          if (processed.isEmpty) continue;
+
+          final bytes =
+              Uint8List.fromList(processed);
+
+          _pages.add(bytes);
+
+          _pageEdits.add(
+            _PageEdit(
+              original:
+                  Uint8List.fromList(bytes),
+            ),
+          );
+
+          added++;
+        } catch (_) {
+          // One bad gallery image must not stop
+          // the remaining pages from being imported.
+          continue;
         }
       }
 
-      if (_pages.isNotEmpty) {
-        _selectedPage = _pages.length - 1;
-        _processed = _pages[_selectedPage];
-        _image = null;
-        _corners = null;
-      }
-    } catch (_) {
-      if (mounted) {
+      if (!mounted) return;
+
+      if (added > 0) {
+        setState(() {
+          _selectedPage =
+              _pages.length - 1;
+
+          _processed =
+              _pages[_selectedPage];
+
+          _image = null;
+          _corners = null;
+        });
+
+        if (added < files.length) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '$added of ${files.length} images were added.',
+              ),
+            ),
+          );
+        }
+      } else {
+        setState(() {
+          _processed = _pages.isNotEmpty
+              ? _pages[_selectedPage]
+              : null;
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Some gallery pages could not be processed.'),
+            content: Text(
+              'No usable document images were found.',
+            ),
           ),
         );
       }
@@ -344,84 +483,178 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     }
   }
 
-  Future<void> _addPage() async {
+  Future<void> _addPage()  Future<void> _addPage() async {
     final file = await Navigator.of(context).push<XFile>(
       MaterialPageRoute(
-        builder: (_) => const LiveDocumentCameraScreen(),
+        builder: (_) =>
+            const LiveDocumentCameraScreen(),
       ),
     );
 
-    if (file == null) return;
+    if (file == null || !mounted) return;
+
+    setState(() => _processing = true);
 
     try {
-      final bytes = await File(file.path).readAsBytes();
-      final decoded = img.decodeImage(bytes);
+      // Keep camera scanner output going through the
+      // same final document-processing pipeline.
+      final processed =
+          await _processScanFile(file);
 
-      if (decoded == null) return;
+      if (processed.isEmpty) {
+        throw StateError(
+          'Empty scanned document.',
+        );
+      }
 
-      final jpg = Uint8List.fromList(
-        img.encodeJpg(
-          decoded,
-          quality: _imageQuality(context),
-        ),
-      );
+      final bytes =
+          Uint8List.fromList(processed);
 
       if (!mounted) return;
 
       setState(() {
-        _pages.add(jpg);
-        _selectedPage = _pages.length - 1;
+        _pages.add(bytes);
+
+        _pageEdits.add(
+          _PageEdit(
+            original:
+                Uint8List.fromList(bytes),
+          ),
+        );
+
+        _selectedPage =
+            _pages.length - 1;
+
+        _processed = bytes;
         _image = file;
-        _processed = jpg;
         _corners = null;
       });
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Could not add the scanned page.'),
+            content: Text(
+              'Could not add the scanned page.',
+            ),
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _processing = false);
       }
     }
   }
 
-  void _deletePage(int index) {
-    if (_pages.length <= 1) return;
+  void _deletePage  void _deletePage(int index) {
+    if (index < 0 ||
+        index >= _pages.length ||
+        _pages.length <= 1) {
+      return;
+    }
+
     setState(() {
       _pages.removeAt(index);
-      if (_selectedPage >= _pages.length) _selectedPage = _pages.length - 1;
+
+      if (index < _pageEdits.length) {
+        _pageEdits.removeAt(index);
+      }
+
+      if (_selectedPage > index) {
+        _selectedPage--;
+      } else if (_selectedPage >= _pages.length) {
+        _selectedPage = _pages.length - 1;
+      }
+
       _processed = _pages[_selectedPage];
+      _image = null;
+      _corners = null;
     });
   }
 
-  void _duplicatePage(int index) {
-    if (index < 0 || index >= _pages.length) return;
+  void _duplicatePage  void _duplicatePage(int index) {
+    if (index < 0 ||
+        index >= _pages.length ||
+        index >= _pageEdits.length) {
+      return;
+    }
+
     setState(() {
-      _pages.insert(index + 1, Uint8List.fromList(_pages[index]));
+      final copiedPage =
+          Uint8List.fromList(_pages[index]);
+
+      final copiedEdit =
+          _pageEdits[index].copy();
+
+      _pages.insert(
+        index + 1,
+        copiedPage,
+      );
+
+      _pageEdits.insert(
+        index + 1,
+        copiedEdit,
+      );
+
       _selectedPage = index + 1;
       _processed = _pages[_selectedPage];
+      _image = null;
+      _corners = null;
     });
   }
 
-  void _movePage(int oldIndex, int newIndex) {
+  void _movePage  void _movePage(
+    int oldIndex,
+    int newIndex,
+  ) {
+    if (oldIndex < 0 ||
+        oldIndex >= _pages.length ||
+        oldIndex >= _pageEdits.length) {
+      return;
+    }
+
     setState(() {
-      if (newIndex > oldIndex) newIndex -= 1;
-      final item = _pages.removeAt(oldIndex);
-      _pages.insert(newIndex, item);
+      if (newIndex > oldIndex) {
+        newIndex--;
+      }
+
+      newIndex = newIndex.clamp(
+        0,
+        _pages.length - 1,
+      );
+
+      final page =
+          _pages.removeAt(oldIndex);
+
+      final edit =
+          _pageEdits.removeAt(oldIndex);
+
+      _pages.insert(newIndex, page);
+      _pageEdits.insert(newIndex, edit);
+
       if (_selectedPage == oldIndex) {
         _selectedPage = newIndex;
-      } else if (oldIndex < _selectedPage && newIndex >= _selectedPage) {
+      } else if (oldIndex < _selectedPage &&
+          newIndex >= _selectedPage) {
         _selectedPage--;
-      } else if (oldIndex > _selectedPage && newIndex <= _selectedPage) {
+      } else if (oldIndex > _selectedPage &&
+          newIndex <= _selectedPage) {
         _selectedPage++;
       }
+
       _processed = _pages[_selectedPage];
+      _image = null;
+      _corners = null;
     });
   }
 
-  void _selectPage(int index) {
-    if (index < 0 || index >= _pages.length) return;
+  void _selectPage  void _selectPage(int index) {
+    if (index < 0 ||
+        index >= _pages.length ||
+        index >= _pageEdits.length) {
+      return;
+    }
+
     setState(() {
       _selectedPage = index;
       _processed = _pages[index];
@@ -430,25 +663,28 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     });
   }
 
-  Future<void> _applyAdjustments() async {
-    if (_processed == null) return;
+  Future<void> _applyAdjustments  Future<void> _applyAdjustments() async {
+    if (_pageEdits.isEmpty ||
+        _selectedPage >= _pageEdits.length) {
+      return;
+    }
+
     setState(() => _processing = true);
+
     try {
-      final decoded = img.decodeImage(_processed!);
-      if (decoded == null) return;
-      img.adjustColor(decoded, brightness: _brightness, contrast: _contrast);
-      final jpg = Uint8List.fromList(img.encodeJpg(decoded, quality: 95));
+      final bytes =
+          _renderPageBytes(_selectedPage);
+
       if (!mounted) return;
+
       setState(() {
-        _processed = jpg;
-        if (_pages.isEmpty) {
-          _pages.add(jpg);
-        } else {
-          _pages[_selectedPage] = jpg;
-        }
+        _pages[_selectedPage] = bytes;
+        _processed = bytes;
       });
     } finally {
-      if (mounted) setState(() => _processing = false);
+      if (mounted) {
+        setState(() => _processing = false);
+      }
     }
   }
 
@@ -456,75 +692,151 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
 
   /// Rotates a specific page in the batch by 90°, regardless of which page
   /// is currently selected in the editor.
-  Future<void> _rotateSpecificPage(int index) async {
-    final bytes = index >= 0 && index < _pages.length ? _pages[index] : _processed;
-    if (bytes == null) return;
+  Future<void> _rotateSpecificPage(
+    int index,
+  ) async {
+    if (index < 0 ||
+        index >= _pages.length) {
+      return;
+    }
+
     setState(() => _processing = true);
+
     try {
-      final decoded = img.decodeImage(bytes);
-      if (decoded == null) return;
-      final rotated = img.copyRotate(decoded, angle: 90);
-      final jpg = Uint8List.fromList(img.encodeJpg(rotated, quality: 95));
+      final source =
+          img.decodeImage(_pages[index]);
+
+      if (source == null) {
+        throw StateError(
+          'Invalid page image.',
+        );
+      }
+
+      final rotated = img.copyRotate(
+        source,
+        angle: 90,
+      );
+
+      final bytes =
+          Uint8List.fromList(
+        img.encodeJpg(
+          rotated,
+          quality: 95,
+        ),
+      );
+
       if (!mounted) return;
+
       setState(() {
-        if (_pages.isEmpty) {
-          _pages.add(jpg);
-          _selectedPage = 0;
-          _processed = jpg;
+        _pages[index] = bytes;
+
+        // Rotation changes the geometry of the master
+        // image, so start a fresh edit state for this page.
+        if (index < _pageEdits.length) {
+          _pageEdits[index] = _PageEdit(
+            original:
+                Uint8List.fromList(bytes),
+          );
         } else {
-          _pages[index] = jpg;
-          if (index == _selectedPage) _processed = jpg;
+          _pageEdits.add(
+            _PageEdit(
+              original:
+                  Uint8List.fromList(bytes),
+            ),
+          );
+        }
+
+        if (index == _selectedPage) {
+          _processed = bytes;
+          _image = null;
+          _corners = null;
         }
       });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not rotate this page.',
+            ),
+          ),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _processing = false);
+      if (mounted) {
+        setState(() => _processing = false);
+      }
     }
   }
 
-  Future<void> _applyFilter(int filter) async {
-    if (_processed == null) return;
-    setState(() {
-      _processing = true;
-      _filter = filter;
-    });
-    final decoded = img.decodeImage(_processed!);
-    if (decoded == null) {
-      if (mounted) setState(() => _processing = false);
+  Future<void> _applyFilter  Future<void> _applyFilter(int filter) async {
+    if (_pageEdits.isEmpty ||
+        _selectedPage >= _pageEdits.length) {
       return;
     }
-    if (filter == 1) {
-      img.grayscale(decoded);
-    } else if (filter == 2) {
-      img.grayscale(decoded);
-      img.adjustColor(decoded, contrast: 1.35, brightness: 1.05);
-    } else if (filter == 3) {
-      img.grayscale(decoded);
-      img.adjustColor(decoded, contrast: 1.75, brightness: 1.08);
-      img.convolution(decoded, filter: const [
-        0, -1, 0,
-        -1, 5, -1,
-        0, -1, 0,
-      ]);
-    } else if (filter == 4) {
-      img.adjustColor(decoded, contrast: 1.22, brightness: 1.04, saturation: 0.92);
-    }
-    final jpg = img.encodeJpg(decoded, quality: 94);
-
-    if (!mounted) return;
 
     setState(() {
-      _processed = Uint8List.fromList(jpg);
-
-      if (_pages.isEmpty) {
-        _pages.add(_processed!);
-        _selectedPage = 0;
-      } else {
-        _pages[_selectedPage] = _processed!;
-      }
-
-      _corners = null;
-      _processing = false;
+      _processing = true;
+      _pageEdits[_selectedPage].filter = filter;
     });
+
+    try {
+      final bytes =
+          _renderPageBytes(_selectedPage);
+
+      if (!mounted) return;
+
+      setState(() {
+        _pages[_selectedPage] = bytes;
+        _processed = bytes;
+        _corners = null;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _processing = false);
+      }
+    }
+  }
+
+  Future<void> _resetSelectedPage() async {
+    if (_pageEdits.isEmpty ||
+        _selectedPage >= _pageEdits.length) {
+      return;
+    }
+
+    setState(() => _processing = true);
+
+    try {
+      final edit = _pageEdits[_selectedPage];
+
+      edit.reset();
+
+      final original =
+          Uint8List.fromList(edit.original);
+
+      if (!mounted) return;
+
+      setState(() {
+        _pages[_selectedPage] = original;
+        _processed = original;
+        _corners = null;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _processing = false);
+      }
+    }
+  }
+
+  Widget _responsiveButtonLabel(String text) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(
+        text,
+        maxLines: 1,
+        softWrap: false,
+      ),
+    );
   }
 
   @override
@@ -620,52 +932,96 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
                           onAddPressed: _showAddPageSheet,
                         ),
                         const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: FilledButton.icon(
-                                onPressed: () => _adjustCornersForPage(_selectedPage),
-                                icon: const Icon(Icons.crop_rounded),
-                                label: const Text('Adjust Corners'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: FilledButton.icon(
-                                onPressed: _saveAsPdf,
-                                icon: const Icon(Icons.picture_as_pdf_rounded),
-                                label: const Text('Save PDF'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _savedDocumentId != null ? _extractSavedDocument : (_image == null ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => TextExtractionScreen(imagePath: _image!.path, documentId: _savedDocumentId)))),
-                                icon: const Icon(Icons.text_fields_rounded),
-                                label: const Text('Extract Text'),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
+                                                  LayoutBuilder(
+                            builder: (context, constraints) {
+                              final halfWidth =
+                                  (constraints.maxWidth - 10) / 2;
+
+                              return Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      SizedBox(
+                                        width: halfWidth,
+                                        child: FilledButton.icon(
+                                          onPressed: () =>
+                                              _adjustCornersForPage(
+                                            _selectedPage,
+                                          ),
+                                          icon: const Icon(
+                                            Icons.crop_rounded,
+                                          ),
+                                          label: _responsiveButtonLabel(
+                                            'Adjust Corners',
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      SizedBox(
+                                        width: halfWidth,
+                                        child: FilledButton.icon(
+                                          onPressed: _saveAsPdf,
+                                          icon: const Icon(
+                                            Icons.picture_as_pdf_rounded,
+                                          ),
+                                          label: _responsiveButtonLabel(
+                                            'Save PDF',
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _savedDocumentId != null
+                                          ? _extractSavedDocument
+                                          : (_image == null
+                                              ? null
+                                              : () =>
+                                                  Navigator.of(context).push(
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          TextExtractionScreen(
+                                                        imagePath:
+                                                            _image!.path,
+                                                        documentId:
+                                                            _savedDocumentId,
+                                                      ),
+                                                    ),
+                                                  )),
+                                      icon: const Icon(
+                                        Icons.text_fields_rounded,
+                                      ),
+                                      label: _responsiveButtonLabel(
+                                        'Extract Text',
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 14),
+Row(
                           children: [
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: _rotatePage,
                                 icon: const Icon(Icons.rotate_right_rounded),
-                                label: const Text('Rotate 90°'),
+                                label: _responsiveButtonLabel('Rotate 90°'),
                               ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: () {
-                                  setState(() { _brightness = 1.0; _contrast = 1.0; });
+                                  setState(() { _pageEdits[_selectedPage].brightness = 1.0; _pageEdits[_selectedPage].contrast = 1.0; });
                                   _applyAdjustments();
                                 },
                                 icon: const Icon(Icons.restart_alt_rounded),
-                                label: const Text('Reset'),
+                                label: _responsiveButtonLabel('Reset'),
                               ),
                             ),
                           ],
@@ -683,8 +1039,8 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
                             const SizedBox(width: 72, child: Text('Brightness')),
                             Expanded(
                               child: Slider(
-                                min: 0.75, max: 1.35, value: _brightness,
-                                onChanged: (v) => setState(() => _brightness = v),
+                                min: 0.75, max: 1.35, value: _pageEdits[_selectedPage].brightness,
+                                onChanged: (v) => setState(() => _pageEdits[_selectedPage].brightness = v),
                                 onChangeEnd: (_) => _applyAdjustments(),
                               ),
                             ),
@@ -695,8 +1051,8 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
                             const SizedBox(width: 72, child: Text('Contrast')),
                             Expanded(
                               child: Slider(
-                                min: 0.75, max: 1.5, value: _contrast,
-                                onChanged: (v) => setState(() => _contrast = v),
+                                min: 0.75, max: 1.5, value: _pageEdits[_selectedPage].contrast,
+                                onChanged: (v) => setState(() => _pageEdits[_selectedPage].contrast = v),
                                 onChangeEnd: (_) => _applyAdjustments(),
                               ),
                             ),
@@ -708,11 +1064,11 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
                           child: ListView(
                             scrollDirection: Axis.horizontal,
                             children: [
-                              _FilterChip(label: 'Original', selected: _filter == 0, onTap: () => _applyFilter(0)),
-                              _FilterChip(label: 'Grayscale', selected: _filter == 1, onTap: () => _applyFilter(1)),
-                              _FilterChip(label: 'Document', selected: _filter == 2, onTap: () => _applyFilter(2)),
-                              _FilterChip(label: 'B&W', selected: _filter == 3, onTap: () => _applyFilter(3)),
-                              _FilterChip(label: 'Magic', selected: _filter == 4, onTap: () => _applyFilter(4)),
+                              _FilterChip(label: 'Original', selected: _pageEdits[_selectedPage].filter == 0, onTap: () => _applyFilter(0)),
+                              _FilterChip(label: 'Grayscale', selected: _pageEdits[_selectedPage].filter == 1, onTap: () => _applyFilter(1)),
+                              _FilterChip(label: 'Document', selected: _pageEdits[_selectedPage].filter == 2, onTap: () => _applyFilter(2)),
+                              _FilterChip(label: 'B&W', selected: _pageEdits[_selectedPage].filter == 3, onTap: () => _applyFilter(3)),
+                              _FilterChip(label: 'Magic', selected: _pageEdits[_selectedPage].filter == 4, onTap: () => _applyFilter(4)),
                             ],
                           ),
                         ),
@@ -727,7 +1083,7 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
                     child: OutlinedButton.icon(
                       onPressed: _pickFromGallery,
                       icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('Gallery'),
+                      label: _responsiveButtonLabel('Gallery'),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -736,7 +1092,9 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
                     child: FilledButton.icon(
                       onPressed: _capture,
                       icon: const Icon(Icons.document_scanner_rounded),
-                      label: Text(hasImage ? 'Scan Again' : 'Scan Document'),
+                      label: _responsiveButtonLabel(
+                          hasImage ? 'Scan Again' : 'Scan Document',
+                        ),
                     ),
                   ),
                 ],
@@ -745,6 +1103,35 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PageEdit {
+  Uint8List original;
+  int filter;
+  double brightness;
+  double contrast;
+
+  _PageEdit({
+    required this.original,
+    this.filter = 0,
+    this.brightness = 1.0,
+    this.contrast = 1.0,
+  });
+
+  void reset() {
+    filter = 0;
+    brightness = 1.0;
+    contrast = 1.0;
+  }
+
+  _PageEdit copy() {
+    return _PageEdit(
+      original: Uint8List.fromList(original),
+      filter: filter,
+      brightness: brightness,
+      contrast: contrast,
     );
   }
 }
