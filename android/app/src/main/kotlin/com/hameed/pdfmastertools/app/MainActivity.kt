@@ -115,7 +115,13 @@ class MainActivity : FlutterActivity() {
                         val mat = Mat()
                         org.opencv.android.Utils.bitmapToMat(bitmap, mat)
 
-                        val detected = findBestDocument(mat)
+                        val detected = findBestDocument(mat)?.takeIf {
+                isUsableDocumentQuad(
+                    it,
+                    mat.width().toDouble(),
+                    mat.height().toDouble()
+                )
+            }
 
                         result.success(
                             detected?.map {
