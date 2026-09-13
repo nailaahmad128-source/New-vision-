@@ -3,86 +3,294 @@ import '../../../core/constants/tools_catalog.dart';
 import '../../../core/theme/app_colors.dart';
 import 'tool_router.dart';
 
-class ToolsScreen extends StatefulWidget {
+class ToolsScreen extends StatelessWidget {
   const ToolsScreen({super.key});
-  @override State<ToolsScreen> createState() => _ToolsScreenState();
-}
-
-class _ToolsScreenState extends State<ToolsScreen> {
-  String query = '';
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tools = ToolsCatalog.all.where((t) {
-      final q = query.trim().toLowerCase();
-      return q.isEmpty || t.title.toLowerCase().contains(q) || t.subtitle.toLowerCase().contains(q);
-    }).toList();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('All PDF Tools')),
-      body: CustomScrollView(slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          sliver: SliverToBoxAdapter(child: TextField(
-            onChanged: (v) => setState(() => query = v),
-            decoration: const InputDecoration(hintText: 'Search a tool', prefixIcon: Icon(Icons.search_rounded)),
-          )),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-          sliver: SliverToBoxAdapter(child: Text('Popular', style: theme.textTheme.titleMedium)),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          sliver: SliverGrid.count(
-            crossAxisCount: 2, mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: 2.25,
-            children: ToolsCatalog.popularOnHome.map((id) => _ToolCard(tool: ToolsCatalog.byId(id))).toList(),
+      appBar: AppBar(
+        title: const Text('PDF Tools (CamScanner)'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+        children: [
+          Text(
+            'Convert',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          sliver: SliverToBoxAdapter(child: Text('Every tool', style: theme.textTheme.titleMedium)),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-          sliver: SliverGrid.builder(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: .95),
-            itemCount: tools.length,
-            itemBuilder: (_, i) => _LargeToolCard(tool: tools[i]),
+          const SizedBox(height: 12),
+
+          _ToolGrid(
+            children: [
+              _ToolItem(
+                title: 'To Word',
+                subtitle: 'PDF to Word',
+                icon: Icons.description_rounded,
+                color: AppColors.toolConvertWord,
+                onTap: () => openTool(context, ToolId.pdfToWord),
+              ),
+              _ToolItem(
+                title: 'To Excel',
+                subtitle: 'PDF to Excel',
+                icon: Icons.table_chart_rounded,
+                color: AppColors.toolConvertWord,
+                onTap: () => openTool(context, ToolId.pdfToExcel),
+              ),
+              _ToolItem(
+                title: 'To PPT',
+                subtitle: 'PDF to PowerPoint',
+                icon: Icons.slideshow_rounded,
+                color: AppColors.toolConvertWord,
+                onTap: () => openTool(context, ToolId.pdfToPpt),
+              ),
+              _ToolItem(
+                title: 'PDF to Images',
+                subtitle: 'Export PDF pages',
+                icon: Icons.photo_library_rounded,
+                color: AppColors.toolPdfToImage,
+                onTap: () => openTool(context, ToolId.pdfToImage),
+              ),
+              _ToolItem(
+                title: 'PDF to Long Image',
+                subtitle: 'Join all pages vertically',
+                icon: Icons.view_agenda_rounded,
+                color: AppColors.toolPdfToImage,
+                onTap: () => openTool(context, ToolId.pdfToLongImage),
+              ),
+            ],
           ),
-        ),
-      ]),
+
+          const SizedBox(height: 28),
+
+          Text(
+            'Edit',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          _ToolGrid(
+            children: [
+              _ToolItem(
+                title: 'Sign',
+                subtitle: 'Fill & sign PDF',
+                icon: Icons.draw_rounded,
+                color: AppColors.toolSign,
+                onTap: () => openTool(context, ToolId.fillSign),
+              ),
+              _ToolItem(
+                title: 'Add Watermark',
+                subtitle: 'Watermark every page',
+                icon: Icons.branding_watermark_rounded,
+                color: AppColors.toolSecurity,
+                onTap: () => openTool(context, ToolId.watermark),
+              ),
+              _ToolItem(
+                title: 'Compress PDF',
+                subtitle: 'Reduce file size',
+                icon: Icons.compress_rounded,
+                color: AppColors.toolCompress,
+                onTap: () => openTool(context, ToolId.compress),
+              ),
+              _ToolItem(
+                title: 'Merge Files',
+                subtitle: 'Combine PDFs',
+                icon: Icons.merge_type_rounded,
+                color: AppColors.toolMerge,
+                onTap: () => openTool(context, ToolId.merge),
+              ),
+              _ToolItem(
+                title: 'PDF Extract',
+                subtitle: 'Extract PDF pages',
+                icon: Icons.content_cut_rounded,
+                color: AppColors.toolSplit,
+                onTap: () => openTool(context, ToolId.split),
+              ),
+              _ToolItem(
+                title: 'Reorder Pages',
+                subtitle: 'Change page order',
+                icon: Icons.reorder_rounded,
+                color: AppColors.toolReorder,
+                onTap: () => openTool(context, ToolId.reorder),
+              ),
+              _ToolItem(
+                title: 'Protect PDF',
+                subtitle: 'Password protection',
+                icon: Icons.lock_rounded,
+                color: AppColors.toolSecurity,
+                onTap: () => openTool(context, ToolId.security),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 28),
+
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: theme.dividerColor,
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.apps_rounded,
+                  color: theme.colorScheme.primary,
+                  size: 28,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Seamlessly manage documents from other apps.',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Open PDF files from other apps and quickly use the tools you need.',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _ToolCard extends StatelessWidget {
-  final ToolDef tool;
-  const _ToolCard({required this.tool});
-  @override Widget build(BuildContext context) => InkWell(
-    borderRadius: BorderRadius.circular(18),
-    onTap: () => openTool(context, tool.id),
-    child: Card(child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
-      CircleAvatar(backgroundColor: tool.color.withValues(alpha: .12), child: Icon(tool.icon, color: tool.color)),
-      const SizedBox(width: 10), Expanded(child: Text(tool.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700))),
-    ]))),
-  );
+class _ToolGrid extends StatelessWidget {
+  final List<Widget> children;
+
+  const _ToolGrid({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 720 ? 4 : 3;
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: children.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: .92,
+          ),
+          itemBuilder: (_, index) => children[index],
+        );
+      },
+    );
+  }
 }
 
-class _LargeToolCard extends StatelessWidget {
-  final ToolDef tool;
-  const _LargeToolCard({required this.tool});
-  @override Widget build(BuildContext context) => InkWell(
-    borderRadius: BorderRadius.circular(22),
-    onTap: () => openTool(context, tool.id),
-    child: Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(22), border: Border.all(color: Theme.of(context).dividerColor), color: Theme.of(context).colorScheme.surface),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(width: 52, height: 52, decoration: BoxDecoration(color: tool.color.withValues(alpha: .12), borderRadius: BorderRadius.circular(16)), child: Icon(tool.icon, color: tool.color, size: 27)),
-        const Spacer(), Text(tool.title, style: const TextStyle(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 4), Text(tool.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
-      ]),
-    ),
-  );
+class _ToolItem extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onTap;
+  final bool enabled;
+
+  const _ToolItem({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    this.onTap,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final opacity = enabled ? 1.0 : .45;
+
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: theme.dividerColor,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Opacity(
+                opacity: opacity,
+                child: Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: color,
+                    size: 28,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 11),
+              Opacity(
+                opacity: opacity,
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Opacity(
+                opacity: opacity,
+                child: Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

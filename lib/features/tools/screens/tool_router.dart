@@ -5,6 +5,7 @@ import 'split_screen.dart';
 import 'compress_screen.dart';
 import 'image_to_pdf_screen.dart';
 import 'pdf_to_image_screen.dart';
+import 'pdf_to_long_image_screen.dart';
 import 'reorder_screen.dart';
 import 'rotate_screen.dart';
 import 'fill_screen.dart';
@@ -26,6 +27,7 @@ void openTool(BuildContext context, ToolId id) {
     ToolId.compress => const CompressScreen(),
     ToolId.imageToPdf => const ImageToPdfScreen(),
     ToolId.pdfToImage => const PdfToImageScreen(),
+    ToolId.pdfToLongImage => const PdfToLongImageScreen(),
     ToolId.reorder => const ReorderScreen(),
     ToolId.rotate => const RotateScreen(),
     ToolId.fill => const FillScreen(),

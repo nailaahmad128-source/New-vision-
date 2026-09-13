@@ -466,6 +466,94 @@ Future<List<dynamic>?> _prepareImageForPdf(String path) async {
 
   /// Rasterize every page of a PDF into a standalone JPEG image, returning
   /// one [File] per page.
+  /// Rasterize all PDF pages and join them vertically into one JPEG.
+  /// Pages are normalized to a common width while preserving their aspect
+  /// ratios. A practical height limit prevents extremely large documents from
+  /// exhausting mobile memory.
+  Future<File> pdfToLongImage(
+    String path, {
+    required String baseOutputName,
+    double dpi = 100,
+  }) async {
+    final bytes = await File(path).readAsBytes();
+    final pages = <img.Image>[];
+
+    const targetWidth = 1400;
+    const maxOutputHeight = 30000;
+
+    await for (final page in Printing.raster(bytes, dpi: dpi)) {
+      final png = await page.toPng();
+      final decoded = img.decodeImage(png);
+      if (decoded == null) continue;
+
+      final resized = decoded.width == targetWidth
+          ? decoded
+          : img.copyResize(
+              decoded,
+              width: targetWidth,
+              interpolation: img.Interpolation.average,
+            );
+
+      pages.add(resized);
+    }
+
+    if (pages.isEmpty) {
+      throw StateError('No pages could be rendered from this PDF.');
+    }
+
+    var totalHeight = 0;
+    for (final page in pages) {
+      totalHeight += page.height;
+    }
+
+    var scale = 1.0;
+    if (totalHeight > maxOutputHeight) {
+      scale = maxOutputHeight / totalHeight;
+    }
+
+    final outputWidth = (targetWidth * scale).round().clamp(1, targetWidth);
+    final outputHeight = (totalHeight * scale).round().clamp(1, maxOutputHeight);
+
+    final canvas = img.Image(
+      width: outputWidth,
+      height: outputHeight,
+      numChannels: 3,
+    );
+
+    img.fill(canvas, color: img.ColorRgb8(255, 255, 255));
+
+    var y = 0;
+
+    for (final page in pages) {
+      final resized = scale == 1.0
+          ? page
+          : img.copyResize(
+              page,
+              width: outputWidth,
+              height: (page.height * scale).round().clamp(1, outputHeight),
+              interpolation: img.Interpolation.average,
+            );
+
+      img.compositeImage(
+        canvas,
+        resized,
+        dstX: 0,
+        dstY: y,
+      );
+
+      y += resized.height;
+    }
+
+    final jpg = img.encodeJpg(canvas, quality: 90);
+    final file = await storage.newTmpFile(
+      '${baseOutputName}_long_image.jpg',
+    );
+
+    await file.writeAsBytes(jpg, flush: true);
+
+    return file;
+  }
+
   Future<List<File>> pdfToImages(
     String path, {
     required String baseOutputName,

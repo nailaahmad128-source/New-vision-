@@ -7,6 +7,7 @@ enum ToolId {
   compress,
   imageToPdf,
   pdfToImage,
+  pdfToLongImage,
   reorder,
   rotate,
   fill,

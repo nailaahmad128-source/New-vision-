@@ -110,7 +110,7 @@ class HomeScreen extends StatelessWidget {
                     childAspectRatio: .82,
                     children: [
                       _Feature(icon: Icons.document_scanner_rounded, label: 'Smart Scan', color: AppColors.brandPrimary, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmartScannerScreen()))),
-                      _Feature(icon: Icons.picture_as_pdf_rounded, label: 'PDF Tools', color: AppColors.toolMerge, onTap: () => openTool(context, ToolId.merge)),
+                      _Feature(icon: Icons.picture_as_pdf_rounded, label: 'PDF Tools', color: AppColors.toolMerge, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ToolsScreen()))),
                       _Feature(icon: Icons.image_rounded, label: 'Import Images', color: AppColors.toolImageToPdf, onTap: () => openTool(context, ToolId.imageToPdf)),
                       _Feature(icon: Icons.file_open_rounded, label: 'Import Files', color: AppColors.toolSplit, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LibraryScreen()))),
                       _Feature(icon: Icons.badge_rounded, label: 'ID Scan', color: AppColors.toolQrScan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmartScannerScreen()))),
