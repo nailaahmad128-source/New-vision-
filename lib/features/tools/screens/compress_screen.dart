@@ -7,6 +7,7 @@ import '../../../core/storage/app_data_controller.dart';
 import '../../../core/utils/format_utils.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../widgets/source_picker.dart';
+import '../widgets/professional_tool_page.dart';
 import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
@@ -92,89 +93,88 @@ class _CompressScreenState extends State<CompressScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Compress PDF')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            if (_path == null)
-              Column(
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 24),
-                    child: EmptyState(
-                      icon: Icons.compress_rounded,
-                      title: 'Choose a PDF to compress',
-                      message: 'Reduce file size for easier sharing and storage.',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _pickFile,
-                      icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Choose PDF'),
-                    ),
-                  ),
-                ],
-              )
-            else ...[
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.picture_as_pdf_rounded),
-                  title: Text(p.basename(_path!), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text('Current size: ${formatBytes(_originalSize)}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => setState(() { _path = null; _originalSize = 0; }),
-                  ),
+    return ProfessionalToolPage(
+      title: 'Compress PDF',
+      description: 'Reduce PDF size for faster sharing and easier storage.',
+      icon: Icons.compress_rounded,
+      history: const ToolHistorySection(toolId: ToolId.compress),
+      child: _path == null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ProfessionalSectionTitle(
+                  title: 'Create or Import',
+                  subtitle: 'Choose a PDF from your device to compress.',
                 ),
-              ),
-              const SizedBox(height: 20),
-              Text('Compression level', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              SegmentedButton<CompressionLevel>(
-                segments: const [
-                  ButtonSegment(value: CompressionLevel.low, label: Text('Low')),
-                  ButtonSegment(value: CompressionLevel.medium, label: Text('Medium')),
-                  ButtonSegment(value: CompressionLevel.high, label: Text('High')),
-                ],
-                selected: {_level},
-                onSelectionChanged: (s) => setState(() => _level = s.first),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                _level == CompressionLevel.low
-                    ? 'Best quality, smallest size reduction.'
-                    : _level == CompressionLevel.medium
-                        ? 'Balanced quality and size — recommended.'
-                        : 'Smallest file, more visible quality loss.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
+                const SizedBox(height: 16),
+                ProfessionalActionGrid(
+                  children: [
+                    ProfessionalAction(
+                      title: 'Device',
+                      subtitle: 'Choose PDF',
+                      icon: Icons.folder_rounded,
+                      onTap: _pickFile,
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ProfessionalFileCard(
+                  name: p.basename(_path!),
+                  subtitle: 'Current size: ${formatBytes(_originalSize)}',
+                  onRemove: () => setState(() {
+                    _path = null;
+                    _originalSize = 0;
+                  }),
+                ),
+                const SizedBox(height: 20),
+                const ProfessionalSectionTitle(
+                  title: 'Compression level',
+                  subtitle: 'Choose the balance between quality and file size.',
+                ),
+                const SizedBox(height: 14),
+                SegmentedButton<CompressionLevel>(
+                  segments: const [
+                    ButtonSegment(
+                      value: CompressionLevel.low,
+                      label: Text('Low'),
+                    ),
+                    ButtonSegment(
+                      value: CompressionLevel.medium,
+                      label: Text('Medium'),
+                    ),
+                    ButtonSegment(
+                      value: CompressionLevel.high,
+                      label: Text('High'),
+                    ),
+                  ],
+                  selected: {_level},
+                  onSelectionChanged: (s) => setState(() => _level = s.first),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _level == CompressionLevel.low
+                      ? 'Best quality with smaller size reduction.'
+                      : _level == CompressionLevel.medium
+                          ? 'Balanced quality and size — recommended.'
+                          : 'Smallest file with more visible quality loss.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 22),
+                ProfessionalPrimaryButton(
+                  label: 'Compress PDF',
+                  icon: Icons.compress_rounded,
+                  loading: _working,
                   onPressed: _working ? null : _compress,
-                  child: _working
-                      ? const SizedBox(
-                          width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Compress PDF'),
                 ),
-              ),
-            ],
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-            const ToolHistorySection(toolId: ToolId.compress),
-          ],
-        ),
-      ),
+              ],
+            ),
     );
   }
 }

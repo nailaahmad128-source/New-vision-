@@ -9,6 +9,7 @@ import '../../../core/services/file_storage_service.dart';
 import '../../../core/storage/app_data_controller.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../widgets/source_picker.dart';
+import '../widgets/professional_tool_page.dart';
 import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
@@ -123,96 +124,119 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
         ConversionPhase.downloading => 'Saving result…',
       };
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            if (_path == null)
-              Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 24),
-                    child: EmptyState(
-                      icon: Icons.offline_bolt_rounded,
-                      title: 'Choose a ${widget.sourceFormat.displayName} file',
-                      message:
-                          'Converted directly on your device. No API key or cloud upload is required.',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _pickFile,
-                      icon: const Icon(Icons.upload_file_rounded),
-                      label: Text('Choose ${widget.sourceFormat.displayName}'),
-                    ),
-                  ),
-                ],
-              )
-            else ...[
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.insert_drive_file_rounded),
-                  title: Text(p.basename(_path!), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text('Will convert to ${widget.targetFormat.displayName}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: _working ? null : () => setState(() => _path = null),
-                  ),
+    return ProfessionalToolPage(
+      title: widget.title,
+      description:
+          'Convert documents directly on your device without uploading them to the cloud.',
+      icon: widget.targetFormat == ConversionFormat.docx
+          ? Icons.description_rounded
+          : widget.targetFormat == ConversionFormat.xlsx
+              ? Icons.table_chart_rounded
+              : Icons.slideshow_rounded,
+      history: ToolHistorySection(toolId: widget.toolId),
+      child: _path == null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ProfessionalSectionTitle(
+                  title: 'Create or Import',
+                  subtitle: 'Choose the file you want to convert.',
                 ),
-              ),
-              const SizedBox(height: 20),
-              if (_error != null) ...[
+                const SizedBox(height: 16),
+                ProfessionalActionGrid(
+                  children: [
+                    ProfessionalAction(
+                      title: 'Device',
+                      subtitle: 'Choose ${widget.sourceFormat.displayName}',
+                      icon: Icons.folder_rounded,
+                      onTap: _pickFile,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.errorContainer,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primaryContainer
+                        .withOpacity(.35),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: _convert,
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: const Text('Retry'),
+                      Icon(
+                        Icons.offline_bolt_rounded,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Your file stays on the device during conversion.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
               ],
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _working ? null : _convert,
-                  child: _working
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
-                            const SizedBox(width: 12),
-                            Text(_phase != null ? _phaseLabel(_phase!) : 'Working…'),
-                          ],
-                        )
-                      : Text('Convert to ${widget.targetFormat.displayName}'),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ProfessionalFileCard(
+                  name: p.basename(_path!),
+                  subtitle:
+                      'Convert to ${widget.targetFormat.displayName}',
+                  onRemove: _working
+                      ? null
+                      : () => setState(() => _path = null),
                 ),
-              ),
-            ],
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-            ToolHistorySection(toolId: widget.toolId),
-          ],
-        ),
-      ),
+                const SizedBox(height: 18),
+                if (_error != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .errorContainer,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_error!),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: _working ? null : _convert,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                ProfessionalPrimaryButton(
+                  label: 'Convert to ${widget.targetFormat.displayName}',
+                  icon: Icons.auto_awesome_rounded,
+                  loading: _working,
+                  onPressed: _working ? null : _convert,
+                ),
+                if (_phase != null) ...[
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Text(
+                      _phaseLabel(_phase!),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ],
+            ),
     );
   }
 }

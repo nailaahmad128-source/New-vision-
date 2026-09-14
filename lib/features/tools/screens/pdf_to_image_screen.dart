@@ -7,6 +7,7 @@ import '../../../core/storage/app_data_controller.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../models/document_item.dart';
 import '../widgets/source_picker.dart';
+import '../widgets/professional_tool_page.dart';
 import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
@@ -74,78 +75,68 @@ class _PdfToImageScreenState extends State<PdfToImageScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('PDF to Image')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            if (_path == null)
-              Column(
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 24),
-                    child: EmptyState(
-                      icon: Icons.photo_library_rounded,
-                      title: 'Choose a PDF to export',
-                      message: 'Every page will be saved as a separate JPEG image.',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _pickFile,
-                      icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Choose PDF'),
-                    ),
-                  ),
-                ],
-              )
-            else ...[
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.picture_as_pdf_rounded),
-                  title: Text(p.basename(_path!), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text('$_pageCount pages'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => setState(() { _path = null; _pageCount = 0; }),
-                  ),
+    return ProfessionalToolPage(
+      title: 'PDF to Image',
+      description: 'Export every PDF page as a high-quality JPEG image.',
+      icon: Icons.photo_library_rounded,
+      history: const ToolHistorySection(toolId: ToolId.pdfToImage),
+      child: _path == null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ProfessionalSectionTitle(
+                  title: 'Create or Import',
+                  subtitle: 'Choose a PDF from your device.',
                 ),
-              ),
-              const SizedBox(height: 20),
-              Text('Image quality', style: Theme.of(context).textTheme.titleMedium),
-              Slider(
-                value: _dpi,
-                min: 72,
-                max: 300,
-                divisions: 4,
-                label: '${_dpi.round()} DPI',
-                onChanged: (v) => setState(() => _dpi = v),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
+                const SizedBox(height: 16),
+                ProfessionalActionGrid(
+                  children: [
+                    ProfessionalAction(
+                      title: 'Device',
+                      subtitle: 'Choose PDF',
+                      icon: Icons.folder_rounded,
+                      onTap: _pickFile,
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ProfessionalFileCard(
+                  name: p.basename(_path!),
+                  subtitle: '$_pageCount pages',
+                  onRemove: () => setState(() {
+                    _path = null;
+                    _pageCount = 0;
+                  }),
+                ),
+                const SizedBox(height: 20),
+                const ProfessionalSectionTitle(
+                  title: 'Image quality',
+                  subtitle: 'Higher DPI gives more detail but creates larger images.',
+                ),
+                Slider(
+                  value: _dpi,
+                  min: 72,
+                  max: 300,
+                  divisions: 4,
+                  label: '${_dpi.round()} DPI',
+                  onChanged: (v) => setState(() => _dpi = v),
+                ),
+                const SizedBox(height: 14),
+                ProfessionalPrimaryButton(
+                  label: 'Export Images',
+                  icon: Icons.photo_library_rounded,
+                  loading: _working,
                   onPressed: _working ? null : _convert,
-                  child: _working
-                      ? const SizedBox(
-                          width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Export Images'),
                 ),
-              ),
-            ],
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-            const ToolHistorySection(toolId: ToolId.pdfToImage),
-          ],
-        ),
-      ),
+              ],
+            ),
     );
   }
 }

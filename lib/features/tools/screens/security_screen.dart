@@ -6,6 +6,7 @@ import '../../../core/services/pdf_tools_service.dart';
 import '../../../core/storage/app_data_controller.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../widgets/source_picker.dart';
+import '../widgets/professional_tool_page.dart';
 import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
@@ -116,119 +117,123 @@ class _SecurityScreenState extends State<SecurityScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('PDF Security')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            SegmentedButton<_SecMode>(
-              segments: const [
-                ButtonSegment(value: _SecMode.protect, label: Text('Add password')),
-                ButtonSegment(value: _SecMode.unlock, label: Text('Remove password')),
-              ],
-              selected: {_mode},
-              onSelectionChanged: (s) => setState(() => _mode = s.first),
-            ),
-            const SizedBox(height: 20),
-            if (_path == null)
-              Column(
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: EmptyState(
-                      icon: Icons.lock_rounded,
-                      title: 'Choose a PDF',
-                      message: 'Protect a file with a password, or unlock one you own.',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _pickFile,
-                      icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Choose PDF'),
-                    ),
-                  ),
-                ],
-              )
-            else ...[
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.picture_as_pdf_rounded),
-                  title: Text(p.basename(_path!), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => setState(() => _path = null),
-                  ),
-                ),
+    return ProfessionalToolPage(
+      title: 'PDF Security',
+      description: 'Protect your PDF with a password or remove a password from a file you own.',
+      icon: Icons.lock_rounded,
+      history: const ToolHistorySection(toolId: ToolId.security),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SegmentedButton<_SecMode>(
+            segments: const [
+              ButtonSegment(
+                value: _SecMode.protect,
+                label: Text('Add password'),
               ),
-              const SizedBox(height: 20),
-              if (_mode == _SecMode.protect) ...[
-                TextField(
-                  controller: _passwordController,
-                  obscureText: _obscure,
-                  decoration: InputDecoration(
-                    labelText: 'New password',
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded),
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _confirmController,
-                  obscureText: _obscure,
-                  decoration: const InputDecoration(labelText: 'Confirm password'),
-                ),
-                const SizedBox(height: 16),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Allow printing'),
-                  value: _allowPrinting,
-                  onChanged: (v) => setState(() => _allowPrinting = v),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Allow copying text'),
-                  value: _allowCopying,
-                  onChanged: (v) => setState(() => _allowCopying = v),
-                ),
-              ] else
-                TextField(
-                  controller: _currentPasswordController,
-                  obscureText: _obscure,
-                  decoration: InputDecoration(
-                    labelText: 'Current password',
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded),
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _working ? null : _apply,
-                  child: _working
-                      ? const SizedBox(
-                          width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : Text(_mode == _SecMode.protect ? 'Protect PDF' : 'Unlock PDF'),
-                ),
+              ButtonSegment(
+                value: _SecMode.unlock,
+                label: Text('Remove password'),
               ),
             ],
-            const SizedBox(height: 32),
-            const Divider(),
+            selected: {_mode},
+            onSelectionChanged: (s) => setState(() => _mode = s.first),
+          ),
+          const SizedBox(height: 18),
+          if (_path == null) ...[
+            const ProfessionalSectionTitle(
+              title: 'Create or Import',
+              subtitle: 'Choose the PDF you want to secure.',
+            ),
             const SizedBox(height: 16),
-            const ToolHistorySection(toolId: ToolId.security),
+            ProfessionalActionGrid(
+              children: [
+                ProfessionalAction(
+                  title: 'Device',
+                  subtitle: 'Choose PDF',
+                  icon: Icons.folder_rounded,
+                  onTap: _pickFile,
+                ),
+              ],
+            ),
+          ] else ...[
+            ProfessionalFileCard(
+              name: p.basename(_path!),
+              onRemove: () => setState(() => _path = null),
+            ),
+            const SizedBox(height: 18),
+            if (_mode == _SecMode.protect) ...[
+              TextField(
+                controller: _passwordController,
+                obscureText: _obscure,
+                decoration: InputDecoration(
+                  labelText: 'New password',
+                  prefixIcon: const Icon(Icons.password_rounded),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscure
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                    ),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _confirmController,
+                obscureText: _obscure,
+                decoration: const InputDecoration(
+                  labelText: 'Confirm password',
+                  prefixIcon: Icon(Icons.password_rounded),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Allow printing'),
+                value: _allowPrinting,
+                onChanged: (v) => setState(() => _allowPrinting = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Allow copying text'),
+                value: _allowCopying,
+                onChanged: (v) => setState(() => _allowCopying = v),
+              ),
+            ] else
+              TextField(
+                controller: _currentPasswordController,
+                obscureText: _obscure,
+                decoration: InputDecoration(
+                  labelText: 'Current password',
+                  prefixIcon: const Icon(Icons.password_rounded),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscure
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                    ),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 20),
+            ProfessionalPrimaryButton(
+              label: _mode == _SecMode.protect
+                  ? 'Protect PDF'
+                  : 'Unlock PDF',
+              icon: _mode == _SecMode.protect
+                  ? Icons.lock_rounded
+                  : Icons.lock_open_rounded,
+              loading: _working,
+              onPressed: _working ? null : _apply,
+            ),
           ],
-        ),
+        ],
       ),
     );
   }

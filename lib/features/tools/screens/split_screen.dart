@@ -7,6 +7,7 @@ import '../../../core/storage/app_data_controller.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../models/document_item.dart';
 import '../widgets/source_picker.dart';
+import '../widgets/professional_tool_page.dart';
 import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
@@ -127,87 +128,82 @@ class _SplitScreenState extends State<SplitScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Split PDF')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            if (_path == null)
-              Column(
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 24),
-                    child: EmptyState(
-                      icon: Icons.call_split_rounded,
-                      title: 'Choose a PDF to split',
-                      message: 'Split it into individual pages or custom page ranges.',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _pickFile,
-                      icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Choose PDF'),
-                    ),
-                  ),
-                ],
-              )
-            else ...[
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.picture_as_pdf_rounded),
-                  title: Text(p.basename(_path!), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text('$_pageCount pages'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => setState(() { _path = null; _pageCount = 0; }),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SegmentedButton<_SplitMode>(
-                segments: const [
-                  ButtonSegment(value: _SplitMode.everyPage, label: Text('Every page')),
-                  ButtonSegment(value: _SplitMode.ranges, label: Text('Custom ranges')),
-                ],
-                selected: {_mode},
-                onSelectionChanged: (s) => setState(() => _mode = s.first),
-              ),
-              if (_mode == _SplitMode.ranges) ...[
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _rangesController,
-                  decoration: const InputDecoration(
-                    labelText: 'Page ranges',
-                    hintText: 'e.g. 1-3, 5, 7-9',
-                  ),
-                  keyboardType: TextInputType.text,
+    return ProfessionalToolPage(
+      title: 'Split PDF',
+      description: 'Split a PDF into individual pages or custom page ranges.',
+      icon: Icons.call_split_rounded,
+      history: const ToolHistorySection(toolId: ToolId.split),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_path == null) ...[
+            const ProfessionalSectionTitle(
+              title: 'Create or Import',
+              subtitle: 'Choose a PDF from your device.',
+            ),
+            const SizedBox(height: 16),
+            ProfessionalActionGrid(
+              children: [
+                ProfessionalAction(
+                  title: 'Device',
+                  subtitle: 'Choose PDF',
+                  icon: Icons.folder_rounded,
+                  onTap: _pickFile,
                 ),
               ],
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _working ? null : _split,
-                  child: _working
-                      ? const SizedBox(
-                          width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Split PDF'),
+            ),
+          ] else ...[
+            ProfessionalFileCard(
+              name: p.basename(_path!),
+              subtitle: '$_pageCount pages',
+              onRemove: () => setState(() {
+                _path = null;
+                _pageCount = 0;
+              }),
+            ),
+            const SizedBox(height: 20),
+            const ProfessionalSectionTitle(
+              title: 'Split options',
+              subtitle: 'Choose how you want to divide this PDF.',
+            ),
+            const SizedBox(height: 14),
+            SegmentedButton<_SplitMode>(
+              segments: const [
+                ButtonSegment(
+                  value: _SplitMode.everyPage,
+                  label: Text('Every page'),
+                ),
+                ButtonSegment(
+                  value: _SplitMode.ranges,
+                  label: Text('Custom ranges'),
+                ),
+              ],
+              selected: {_mode},
+              onSelectionChanged: (s) => setState(() => _mode = s.first),
+            ),
+            if (_mode == _SplitMode.ranges) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: _rangesController,
+                decoration: const InputDecoration(
+                  labelText: 'Page ranges',
+                  hintText: 'e.g. 1-3, 5, 7-9',
+                  prefixIcon: Icon(Icons.format_list_numbered_rounded),
                 ),
               ),
             ],
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-            const ToolHistorySection(toolId: ToolId.split),
+            const SizedBox(height: 22),
+            ProfessionalPrimaryButton(
+              label: 'Split PDF',
+              icon: Icons.call_split_rounded,
+              loading: _working,
+              onPressed: _working ? null : _split,
+            ),
           ],
-        ),
+        ],
       ),
     );
   }

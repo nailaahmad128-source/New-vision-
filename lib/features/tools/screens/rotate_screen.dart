@@ -8,6 +8,7 @@ import '../../../core/services/pdf_tools_service.dart';
 import '../../../core/storage/app_data_controller.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../widgets/source_picker.dart';
+import '../widgets/professional_tool_page.dart';
 import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
@@ -128,147 +129,169 @@ class _RotateScreenState extends State<RotateScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rotate PDF'),
-        actions: _thumbs.isNotEmpty
-            ? [
-                IconButton(
-                  icon: Icon(_allSelected ? Icons.deselect_rounded : Icons.select_all_rounded),
-                  tooltip: _allSelected ? 'Deselect all' : 'Select all',
-                  onPressed: () => setState(() {
-                    _allSelected = !_allSelected;
-                    _selected.clear();
-                    if (_allSelected) _selected.addAll(List.generate(_thumbs.length, (i) => i));
-                  }),
+    return ProfessionalToolPage(
+      title: 'Rotate PDF',
+      description: 'Select pages and rotate them 90 degrees at a time.',
+      icon: Icons.rotate_right_rounded,
+      history: const ToolHistorySection(toolId: ToolId.rotate),
+      child: _path == null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ProfessionalSectionTitle(
+                  title: 'Create or Import',
+                  subtitle: 'Choose the PDF whose pages you want to rotate.',
                 ),
-              ]
-            : null,
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            if (_path == null)
-              Column(
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 24),
-                    child: EmptyState(
-                      icon: Icons.rotate_right_rounded,
-                      title: 'Choose a PDF',
-                      message: 'Select pages and rotate the sideways or upside-down ones.',
+                const SizedBox(height: 16),
+                ProfessionalActionGrid(
+                  children: [
+                    ProfessionalAction(
+                      title: 'Device',
+                      subtitle: 'Choose PDF',
+                      icon: Icons.folder_rounded,
+                      onTap: _pickFile,
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _pickFile,
-                      icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Choose PDF'),
-                    ),
-                  ),
-                ],
-              )
-            else if (_loading)
-              const Padding(
-                padding: EdgeInsets.only(top: 60),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else ...[
-              Text('Tap pages to select, then rotate', style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 12),
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: 0.72,
+                  ],
                 ),
-                itemCount: _thumbs.length,
-                itemBuilder: (ctx, i) {
-                  final isSelected = _selected.contains(i);
-                  final rotation = _rotations[i] ?? 0;
-                  return GestureDetector(
-                    onTap: () => setState(() {
-                      isSelected ? _selected.remove(i) : _selected.add(i);
-                    }),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
-                          width: isSelected ? 2.5 : 1,
-                        ),
+              ],
+            )
+          : _loading
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 60),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ProfessionalSectionTitle(
+                      title: '${_selected.length} of ${_thumbs.length} selected',
+                      subtitle: 'Tap pages to select them, then rotate.',
+                    ),
+                    const SizedBox(height: 14),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        childAspectRatio: .72,
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Transform.rotate(
-                            angle: rotation * 3.14159265 / 180,
-                            child: Image.memory(_thumbs[i], fit: BoxFit.cover),
-                          ),
-                          Positioned(
-                            bottom: 4, left: 4,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(6)),
-                              child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontSize: 11)),
-                            ),
-                          ),
-                          if (isSelected)
-                            Positioned(
-                              top: 4, right: 4,
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle),
-                                child: const Icon(Icons.check_rounded, color: Colors.white, size: 14),
+                      itemCount: _thumbs.length,
+                      itemBuilder: (ctx, i) {
+                        final selected = _selected.contains(i);
+                        final rotation = _rotations[i] ?? 0;
+
+                        return GestureDetector(
+                          onTap: () => setState(() {
+                            selected
+                                ? _selected.remove(i)
+                                : _selected.add(i);
+                          }),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(13),
+                              border: Border.all(
+                                color: selected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).dividerColor,
+                                width: selected ? 2.5 : 1,
                               ),
                             ),
-                        ],
-                      ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Transform.rotate(
+                                  angle: rotation * 3.14159265 / 180,
+                                  child: Image.memory(
+                                    _thumbs[i],
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 5,
+                                  left: 5,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black54,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      '${i + 1}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (selected)
+                                  Positioned(
+                                    top: 5,
+                                    right: 5,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(3),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.check_rounded,
+                                        color: Colors.white,
+                                        size: 15,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _selected.isEmpty ? null : _rotateSelection,
-                      icon: const Icon(Icons.rotate_right_rounded),
-                      label: const Text('Rotate 90°'),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _selected.isEmpty
+                                ? null
+                                : _rotateSelection,
+                            icon: const Icon(Icons.rotate_right_rounded),
+                            label: const Text('Rotate 90°'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _working ? null : _apply,
+                            icon: _working
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.check_rounded),
+                            label: const Text('Save'),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: _working ? null : _apply,
-                      child: _working
-                          ? const SizedBox(
-                              width: 20, height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Text('Save'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-            const ToolHistorySection(toolId: ToolId.rotate),
-          ],
-        ),
-      ),
+                  ],
+                ),
     );
   }
 }

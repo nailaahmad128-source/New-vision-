@@ -7,6 +7,7 @@ import '../../../core/storage/app_data_controller.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../models/document_item.dart';
 import '../widgets/source_picker.dart';
+import '../widgets/professional_tool_page.dart';
 import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
@@ -108,109 +109,72 @@ class _PdfToLongImageScreenState extends State<PdfToLongImageScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('PDF to Long Image'),
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            if (_path == null)
-              Column(
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 24),
-                    child: EmptyState(
-                      icon: Icons.view_agenda_rounded,
-                      title: 'Create a long image from a PDF',
-                      message:
-                          'All PDF pages will be joined vertically into one continuous JPEG image.',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _working ? null : _pickFile,
-                      icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Choose PDF'),
-                    ),
-                  ),
-                ],
-              )
-            else ...[
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.picture_as_pdf_rounded),
-                  title: Text(
-                    p.basename(_path!),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text('$_pageCount pages will be joined'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: _working
-                        ? null
-                        : () => setState(() {
-                              _path = null;
-                              _pageCount = 0;
-                            }),
-                  ),
+    return ProfessionalToolPage(
+      title: 'PDF to Long Image',
+      description: 'Join all PDF pages vertically into one continuous image.',
+      icon: Icons.view_agenda_rounded,
+      history: const ToolHistorySection(toolId: ToolId.pdfToLongImage),
+      child: _path == null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ProfessionalSectionTitle(
+                  title: 'Create or Import',
+                  subtitle: 'Choose the PDF you want to turn into one long image.',
                 ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Image quality',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              Slider(
-                value: _dpi,
-                min: 72,
-                max: 150,
-                divisions: 3,
-                label: '${_dpi.round()} DPI',
-                onChanged: _working
-                    ? null
-                    : (v) => setState(() => _dpi = v),
-              ),
-              Text(
-                'Lower DPI creates a smaller long image and uses less memory.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
+                const SizedBox(height: 16),
+                ProfessionalActionGrid(
+                  children: [
+                    ProfessionalAction(
+                      title: 'Device',
+                      subtitle: 'Choose PDF',
+                      icon: Icons.folder_rounded,
+                      onTap: _pickFile,
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ProfessionalFileCard(
+                  name: p.basename(_path!),
+                  subtitle: '$_pageCount pages will be joined',
+                  onRemove: _working
+                      ? null
+                      : () => setState(() {
+                            _path = null;
+                            _pageCount = 0;
+                          }),
+                ),
+                const SizedBox(height: 20),
+                const ProfessionalSectionTitle(
+                  title: 'Image quality',
+                  subtitle: 'Lower DPI creates a smaller image and uses less memory.',
+                ),
+                Slider(
+                  value: _dpi,
+                  min: 72,
+                  max: 150,
+                  divisions: 3,
+                  label: '${_dpi.round()} DPI',
+                  onChanged: _working
+                      ? null
+                      : (v) => setState(() => _dpi = v),
+                ),
+                const SizedBox(height: 14),
+                ProfessionalPrimaryButton(
+                  label: 'Create Long Image',
+                  icon: Icons.auto_awesome_rounded,
+                  loading: _working,
                   onPressed: _working ? null : _convert,
-                  icon: _working
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.auto_awesome_rounded),
-                  label: Text(
-                    _working ? 'Creating Long Image…' : 'Create Long Image',
-                  ),
                 ),
-              ),
-            ],
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-            const ToolHistorySection(
-              toolId: ToolId.pdfToLongImage,
+              ],
             ),
-          ],
-        ),
-      ),
     );
   }
 }

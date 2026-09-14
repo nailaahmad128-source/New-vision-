@@ -7,6 +7,7 @@ import '../../../core/storage/app_data_controller.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../models/document_item.dart';
 import '../widgets/source_picker.dart';
+import '../widgets/professional_tool_page.dart';
 import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
@@ -73,68 +74,69 @@ class _MergeScreenState extends State<MergeScreen> {
     });
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Merge PDF')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addFiles,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add PDFs'),
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-          children: [
-            if (_paths.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 40),
-                child: EmptyState(
-                  icon: Icons.merge_type_rounded,
-                  title: 'Add PDFs to merge',
-                  message: 'Pick two or more PDF files. Drag to set the order they\'ll be combined in.',
-                ),
-              )
-            else ...[
-              Text('${_paths.length} file${_paths.length == 1 ? '' : 's'} · drag to reorder',
-                  style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 12),
-              ReorderableListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _paths.length,
-                onReorder: _reorder,
-                itemBuilder: (ctx, i) => Card(
-                  key: ValueKey(_paths[i]),
-                  child: ListTile(
-                    leading: CircleAvatar(child: Text('${i + 1}')),
-                    title: Text(p.basename(_paths[i]), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => setState(() => _paths.removeAt(i)),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _paths.length >= 2 && !_working ? _merge : null,
-                  child: _working
-                      ? const SizedBox(
-                          width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Merge Files'),
-                ),
-              ),
-            ],
-            const SizedBox(height: 32),
-            const Divider(),
+    return ProfessionalToolPage(
+      title: 'Merge PDF',
+      description: 'Combine multiple PDF files into one document in the order you choose.',
+      icon: Icons.merge_type_rounded,
+      history: const ToolHistorySection(toolId: ToolId.merge),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_paths.isEmpty) ...[
+            const ProfessionalSectionTitle(
+              title: 'Create or Import',
+              subtitle: 'Add two or more PDF files to merge.',
+            ),
             const SizedBox(height: 16),
-            const ToolHistorySection(toolId: ToolId.merge),
+            ProfessionalActionGrid(
+              children: [
+                ProfessionalAction(
+                  title: 'Device',
+                  subtitle: 'Select PDFs',
+                  icon: Icons.folder_rounded,
+                  onTap: _addFiles,
+                ),
+              ],
+            ),
+          ] else ...[
+            ProfessionalSectionTitle(
+              title: '${_paths.length} PDF${_paths.length == 1 ? '' : 's'} selected',
+              subtitle: 'Drag the files to change their order.',
+            ),
+            const SizedBox(height: 14),
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _paths.length,
+              onReorder: _reorder,
+              itemBuilder: (ctx, i) => Padding(
+                key: ValueKey(_paths[i]),
+                padding: const EdgeInsets.only(bottom: 9),
+                child: ProfessionalFileCard(
+                  name: p.basename(_paths[i]),
+                  subtitle: 'Page ${i + 1}',
+                  onRemove: () => setState(() => _paths.removeAt(i)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _addFiles,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add More PDFs'),
+            ),
+            const SizedBox(height: 16),
+            ProfessionalPrimaryButton(
+              label: 'Merge Files',
+              icon: Icons.merge_type_rounded,
+              loading: _working,
+              onPressed: _paths.length >= 2 && !_working ? _merge : null,
+            ),
           ],
-        ),
+        ],
       ),
     );
   }

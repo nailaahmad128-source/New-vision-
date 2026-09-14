@@ -7,6 +7,7 @@ import '../../../core/services/pdf_tools_service.dart';
 import '../../../core/storage/app_data_controller.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../widgets/source_picker.dart';
+import '../widgets/professional_tool_page.dart';
 import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
@@ -87,69 +88,62 @@ class _ReorderScreenState extends State<ReorderScreen> {
     });
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Reorder Pages')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            if (_path == null)
-              Column(
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 24),
-                    child: EmptyState(
-                      icon: Icons.reorder_rounded,
-                      title: 'Choose a PDF',
-                      message: 'Drag pages into the order you want, then save.',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _pickFile,
-                      icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Choose PDF'),
-                    ),
-                  ),
-                ],
-              )
-            else if (_loading)
-              const Padding(
-                padding: EdgeInsets.only(top: 60),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else ...[
-              Text('Drag to reorder ${_order.length} pages', style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 12),
-              ReorderableGridView(
-                order: _order,
-                thumbs: _thumbs,
-                onReorder: _reorder,
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _working ? null : _apply,
-                  child: _working
-                      ? const SizedBox(
-                          width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Save New Order'),
+    return ProfessionalToolPage(
+      title: 'Reorder Pages',
+      description: 'Move PDF pages into exactly the order you want.',
+      icon: Icons.reorder_rounded,
+      history: const ToolHistorySection(toolId: ToolId.reorder),
+      child: _path == null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const ProfessionalSectionTitle(
+                  title: 'Create or Import',
+                  subtitle: 'Choose a PDF and drag its pages into a new order.',
                 ),
-              ),
-            ],
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-            const ToolHistorySection(toolId: ToolId.reorder),
-          ],
-        ),
-      ),
+                const SizedBox(height: 16),
+                ProfessionalActionGrid(
+                  children: [
+                    ProfessionalAction(
+                      title: 'Device',
+                      subtitle: 'Choose PDF',
+                      icon: Icons.folder_rounded,
+                      onTap: _pickFile,
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : _loading
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 60),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ProfessionalSectionTitle(
+                      title: '${_order.length} pages',
+                      subtitle: 'Long-press and drag a page to reorder it.',
+                    ),
+                    const SizedBox(height: 14),
+                    ReorderableGridView(
+                      order: _order,
+                      thumbs: _thumbs,
+                      onReorder: _reorder,
+                    ),
+                    const SizedBox(height: 20),
+                    ProfessionalPrimaryButton(
+                      label: 'Save New Order',
+                      icon: Icons.check_rounded,
+                      loading: _working,
+                      onPressed: _working ? null : _apply,
+                    ),
+                  ],
+                ),
     );
   }
 }

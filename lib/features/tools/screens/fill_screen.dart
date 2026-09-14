@@ -7,6 +7,7 @@ import '../../../core/storage/app_data_controller.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../fill_sign/screens/fill_sign_screen.dart';
 import '../widgets/source_picker.dart';
+import '../widgets/professional_tool_page.dart';
 import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
@@ -80,102 +81,111 @@ class _FillScreenState extends State<FillScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Fill PDF')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            if (_path == null)
-              Column(
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 24),
-                    child: EmptyState(
-                      icon: Icons.edit_note_rounded,
-                      title: 'Choose a fillable PDF',
-                      message: 'If the PDF has real form fields, we\'ll detect them automatically. Otherwise use Fill & Sign to place text and a signature anywhere.',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _pickFile,
-                      icon: const Icon(Icons.upload_file_rounded),
-                      label: const Text('Choose PDF'),
-                    ),
-                  ),
-                ],
-              )
-            else if (_loading)
-              const Padding(
-                padding: EdgeInsets.only(top: 60),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_fields.isEmpty)
-              Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: EmptyState(
-                      icon: Icons.info_outline_rounded,
-                      title: 'No fillable fields found',
-                      message: 'This PDF has no AcroForm fields. Use Fill & Sign to add text and a signature anywhere on the page instead.',
-                      action: FilledButton.icon(
-                        onPressed: () {
-                          Navigator.pushReplacement(context, MaterialPageRoute(
-                            builder: (_) => FillSignScreen(initialPath: _path),
-                          ));
-                        },
-                        icon: const Icon(Icons.draw_rounded),
-                        label: const Text('Open Fill & Sign'),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            else ...[
-              Text('${_fields.length} fields found', style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 12),
-              ..._fields.map((f) {
-                if (f.isCheckbox) {
-                  return CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(f.name),
-                    value: _checkValues[f.name] ?? false,
-                    onChanged: (v) => setState(() => _checkValues[f.name] = v ?? false),
-                  );
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: TextField(
-                    decoration: InputDecoration(labelText: f.name),
-                    onChanged: (v) => _textValues[f.name] = v,
-                  ),
-                );
-              }),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _working ? null : _apply,
-                  child: _working
-                      ? const SizedBox(
-                          width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Save Filled PDF'),
-                ),
-              ),
-            ],
-            const SizedBox(height: 32),
-            const Divider(),
+    return ProfessionalToolPage(
+      title: 'Fill PDF',
+      description: 'Fill real PDF form fields directly and save the completed document.',
+      icon: Icons.edit_note_rounded,
+      history: const ToolHistorySection(toolId: ToolId.fill),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_path == null) ...[
+            const ProfessionalSectionTitle(
+              title: 'Create or Import',
+              subtitle: 'Choose a fillable PDF from your device.',
+            ),
             const SizedBox(height: 16),
-            const ToolHistorySection(toolId: ToolId.fill),
+            ProfessionalActionGrid(
+              children: [
+                ProfessionalAction(
+                  title: 'Device',
+                  subtitle: 'Choose PDF',
+                  icon: Icons.folder_rounded,
+                  onTap: _pickFile,
+                ),
+              ],
+            ),
+          ] else if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 60),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_fields.isEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ProfessionalFileCard(
+                  name: p.basename(_path!),
+                  onRemove: () => setState(() {
+                    _path = null;
+                    _fields = [];
+                  }),
+                ),
+                const SizedBox(height: 18),
+                const ProfessionalSectionTitle(
+                  title: 'No fillable fields found',
+                  subtitle:
+                      'This PDF does not contain standard form fields.',
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => FillSignScreen(
+                            initialPath: _path,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.draw_rounded),
+                    label: const Text('Open Fill & Sign'),
+                  ),
+                ),
+              ],
+            )
+          else ...[
+            ProfessionalSectionTitle(
+              title: '${_fields.length} fields found',
+              subtitle: 'Complete the fields below.',
+            ),
+            const SizedBox(height: 14),
+            ..._fields.map((f) {
+              if (f.isCheckbox) {
+                return CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(f.name),
+                  value: _checkValues[f.name] ?? false,
+                  onChanged: (v) =>
+                      setState(() => _checkValues[f.name] = v ?? false),
+                );
+              }
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TextField(
+                  decoration: InputDecoration(
+                    labelText: f.name,
+                  ),
+                  onChanged: (v) => _textValues[f.name] = v,
+                ),
+              );
+            }),
+            const SizedBox(height: 8),
+            ProfessionalPrimaryButton(
+              label: 'Save Filled PDF',
+              icon: Icons.check_rounded,
+              loading: _working,
+              onPressed: _working ? null : _apply,
+            ),
           ],
-        ),
+        ],
       ),
     );
   }

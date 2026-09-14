@@ -7,6 +7,7 @@ import '../../../core/services/pdf_tools_service.dart';
 import '../../../core/storage/app_data_controller.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../widgets/tool_history_list.dart';
+import '../widgets/professional_tool_page.dart';
 import '../widgets/tool_result_screen.dart';
 import '../../../core/services/image_capture.dart';
 
@@ -84,102 +85,119 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Image to PDF')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            if (_images.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 24),
-                child: EmptyState(
-                  icon: Icons.image_rounded,
-                  title: 'Add photos',
-                  message: 'Pick photos from your gallery or take new ones — each becomes a page.',
-                ),
-              )
-            else
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                ),
-                itemCount: _images.length,
-                itemBuilder: (ctx, i) => Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(File(_images[i]), fit: BoxFit.cover),
+    return ProfessionalToolPage(
+      title: 'Image to PDF',
+      description: 'Turn photos into a clean multi-page PDF document.',
+      icon: Icons.picture_as_pdf_rounded,
+      history: const ToolHistorySection(toolId: ToolId.imageToPdf),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_images.isEmpty)
+            const ProfessionalSectionTitle(
+              title: 'Create or Import',
+              subtitle: 'Add photos from your gallery or camera.',
+            )
+          else
+            ProfessionalSectionTitle(
+              title: '${_images.length} image${_images.length == 1 ? '' : 's'}',
+              subtitle: 'These images will become PDF pages.',
+            ),
+          const SizedBox(height: 16),
+          if (_images.isNotEmpty)
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+              ),
+              itemCount: _images.length,
+              itemBuilder: (ctx, i) => Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(13),
+                    child: Image.file(
+                      File(_images[i]),
+                      fit: BoxFit.cover,
                     ),
-                    Positioned(
-                      top: 4, right: 4,
-                      child: GestureDetector(
-                        onTap: () => setState(() => _images.removeAt(i)),
-                        child: Container(
-                          padding: const EdgeInsets.all(3),
-                          decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                          child: const Icon(Icons.close_rounded, color: Colors.white, size: 16),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _images.removeAt(i)),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                          size: 16,
                         ),
                       ),
                     ),
-                    Positioned(
-                      bottom: 4, left: 4,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(6)),
-                        child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontSize: 11)),
+                  ),
+                  Positioned(
+                    bottom: 4,
+                    left: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${i + 1}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _addImages,
-                    icon: const Icon(Icons.photo_library_rounded),
-                    label: const Text('Gallery'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _addFromCamera,
-                    icon: const Icon(Icons.camera_alt_rounded),
-                    label: const Text('Camera'),
-                  ),
-                ),
-              ],
             ),
-            if (_images.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _working ? null : _convert,
-                  child: _working
-                      ? const SizedBox(
-                          width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : Text('Create PDF (${_images.length})'),
-                ),
+          const SizedBox(height: 16),
+          ProfessionalActionGrid(
+            children: [
+              ProfessionalAction(
+                title: 'Gallery',
+                subtitle: 'Choose photos',
+                icon: Icons.photo_library_rounded,
+                onTap: _addImages,
+              ),
+              ProfessionalAction(
+                title: 'Camera',
+                subtitle: 'Take a photo',
+                icon: Icons.camera_alt_rounded,
+                onTap: _addFromCamera,
               ),
             ],
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-            const ToolHistorySection(toolId: ToolId.imageToPdf),
+          ),
+          if (_images.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            ProfessionalPrimaryButton(
+              label: 'Create PDF (${_images.length})',
+              icon: Icons.picture_as_pdf_rounded,
+              loading: _working,
+              onPressed: _working ? null : _convert,
+            ),
           ],
-        ),
+        ],
       ),
     );
   }

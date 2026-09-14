@@ -7,6 +7,7 @@ import '../../../core/services/pdf_tools_service.dart';
 import '../../../core/storage/app_data_controller.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../widgets/source_picker.dart';
+import '../widgets/professional_tool_page.dart';
 import '../widgets/tool_history_list.dart';
 import '../widgets/tool_result_screen.dart';
 
@@ -60,28 +61,71 @@ class _WatermarkScreenState extends State<WatermarkScreen> {
     } finally { if (mounted) setState(() => _working = false); }
   }
 
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Watermark PDF')),
-      body: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 32), children: [
-        if (_path == null) ...[
-          const EmptyState(icon: Icons.branding_watermark_rounded, title: 'Add a watermark', message: 'Place a subtle custom label on every page of a PDF.'),
-          const SizedBox(height: 16),
-          SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _pick, icon: const Icon(Icons.upload_file_rounded), label: const Text('Choose PDF'))),
-        ] else ...[
-          Card(child: ListTile(leading: const Icon(Icons.picture_as_pdf_rounded), title: Text(p.basename(_path!), maxLines: 2, overflow: TextOverflow.ellipsis), trailing: IconButton(onPressed: _pick, icon: const Icon(Icons.swap_horiz_rounded)))),
-          const SizedBox(height: 16),
-          TextField(controller: _text, decoration: const InputDecoration(labelText: 'Watermark text', prefixIcon: Icon(Icons.text_fields_rounded))),
-          const SizedBox(height: 16),
-          Text('Text size: ${_size.round()}'),
-          Slider(value: _size, min: 12, max: 48, divisions: 12, onChanged: (v) => setState(() => _size = v)),
-          const SizedBox(height: 12),
-          FilledButton.icon(onPressed: _working ? null : _apply, icon: _working ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.auto_awesome_rounded), label: Text(_working ? 'Applying…' : 'Add Watermark')),
+    return ProfessionalToolPage(
+      title: 'Watermark PDF',
+      description: 'Add a subtle custom watermark to every page of your PDF.',
+      icon: Icons.branding_watermark_rounded,
+      history: const ToolHistorySection(toolId: ToolId.watermark),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_path == null) ...[
+            const ProfessionalSectionTitle(
+              title: 'Create or Import',
+              subtitle: 'Choose the PDF you want to watermark.',
+            ),
+            const SizedBox(height: 16),
+            ProfessionalActionGrid(
+              children: [
+                ProfessionalAction(
+                  title: 'Device',
+                  subtitle: 'Choose PDF',
+                  icon: Icons.folder_rounded,
+                  onTap: _pick,
+                ),
+              ],
+            ),
+          ] else ...[
+            ProfessionalFileCard(
+              name: p.basename(_path!),
+              onChange: _pick,
+              onRemove: () => setState(() => _path = null),
+            ),
+            const SizedBox(height: 20),
+            const ProfessionalSectionTitle(
+              title: 'Watermark',
+              subtitle: 'Customize the text that will appear on every page.',
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _text,
+              decoration: const InputDecoration(
+                labelText: 'Watermark text',
+                prefixIcon: Icon(Icons.text_fields_rounded),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text('Text size: ${_size.round()}'),
+            Slider(
+              value: _size,
+              min: 12,
+              max: 48,
+              divisions: 12,
+              onChanged: (v) => setState(() => _size = v),
+            ),
+            const SizedBox(height: 14),
+            ProfessionalPrimaryButton(
+              label: 'Add Watermark',
+              icon: Icons.auto_awesome_rounded,
+              loading: _working,
+              onPressed: _working ? null : _apply,
+            ),
+          ],
         ],
-        const SizedBox(height: 32), const Divider(), const SizedBox(height: 16),
-        const ToolHistorySection(toolId: ToolId.watermark),
-      ]),
+      ),
     );
   }
 }
