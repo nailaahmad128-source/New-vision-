@@ -195,7 +195,7 @@ class LocalOfficeConverter implements ConversionProvider {
                         page.lines,
                       ),
                   italic: _isItalic(line.fontStyle),
-                  fontSize: _safeFontSize(line.fontSize).round(),
+                  fontSize: _safeFontSize(line.fontSize),
                 ),
               );
 
