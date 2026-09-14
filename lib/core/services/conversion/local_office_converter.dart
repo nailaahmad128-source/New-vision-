@@ -195,7 +195,7 @@ class LocalOfficeConverter implements ConversionProvider {
                         page.lines,
                       ),
                   italic: _isItalic(line.fontStyle),
-                  fontSize: _safeFontSize(line.fontSize),
+                  fontSize: _safeFontSize(line.fontSize).round(),
                 ),
               );
 
@@ -643,7 +643,7 @@ class LocalOfficeConverter implements ConversionProvider {
           y: y,
           width: width,
           height: height,
-          fontSize: _safeFontSize(line.fontSize),
+          fontSize: _safeFontSize(line.fontSize).round(),
         );
       }
 
