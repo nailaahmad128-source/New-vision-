@@ -1,0 +1,213 @@
+import 'dart:io';
+
+import 'package:file/local.dart';
+import 'package:open_xml/open_xml.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
+
+import '../file_storage_service.dart';
+import 'conversion_types.dart';
+
+class LocalOfficeConverter {
+  const LocalOfficeConverter();
+
+  static const LocalFileSystem _fs = LocalFileSystem();
+
+  Future<File> convert({
+    required String sourcePath,
+    required ConversionFormat sourceFormat,
+    required ConversionFormat targetFormat,
+    required String outputFileName,
+    required FileStorageService storage,
+    void Function(ConversionPhase phase)? onPhase,
+  }) async {
+    if (sourceFormat != ConversionFormat.pdf) {
+      throw const ConversionException(
+        'Local conversion currently supports PDF to Word, Excel and PowerPoint.',
+      );
+    }
+
+    if (targetFormat == ConversionFormat.pdf) {
+      throw const ConversionException(
+        'PDF is already the source format.',
+      );
+    }
+
+    onPhase?.call(ConversionPhase.converting);
+
+    final sourceFile = File(sourcePath);
+    if (!await sourceFile.exists()) {
+      throw const ConversionException('The selected PDF file was not found.');
+    }
+
+    final bytes = await sourceFile.readAsBytes();
+    if (bytes.isEmpty) {
+      throw const ConversionException('The selected PDF file is empty.');
+    }
+
+    final document = PdfDocument(inputBytes: bytes);
+
+    try {
+      final extractor = PdfTextExtractor(document);
+      final pageTexts = <String>[];
+
+      for (var i = 0; i < document.pages.count; i++) {
+        final text = extractor
+            .extractText(startPageIndex: i, endPageIndex: i)
+            .trim();
+
+        pageTexts.add(text);
+      }
+
+      final outputPath = '${storage.tmpDirectory.path}/$outputFileName';
+
+      switch (targetFormat) {
+        case ConversionFormat.docx:
+          await _writeDocx(pageTexts, outputPath);
+          break;
+
+        case ConversionFormat.xlsx:
+          await _writeXlsx(pageTexts, outputPath);
+          break;
+
+        case ConversionFormat.pptx:
+          await _writePptx(pageTexts, outputPath);
+          break;
+
+        case ConversionFormat.pdf:
+          throw const ConversionException(
+            'PDF is already the source format.',
+          );
+      }
+
+      final result = File(outputPath);
+      if (!await result.exists()) {
+        throw const ConversionException(
+          'The local conversion did not produce an output file.',
+        );
+      }
+
+      final size = await result.length();
+      if (size == 0) {
+        throw const ConversionException(
+          'The local conversion produced an empty file.',
+        );
+      }
+
+      return result;
+    } finally {
+      document.dispose();
+    }
+  }
+
+  Future<void> _writeDocx(
+    List<String> pageTexts,
+    String outputPath,
+  ) async {
+    final doc = await WordDocument.create(_fs);
+
+    doc.addParagraph(
+      Paragraph()
+        ..addRun(
+          Run(
+            text: 'Converted PDF',
+            bold: true,
+            fontSize: 20,
+          ),
+        ),
+    );
+
+    for (var i = 0; i < pageTexts.length; i++) {
+      doc.addParagraph(
+        Paragraph()
+          ..addRun(
+            Run(
+              text: 'Page ${i + 1}',
+              bold: true,
+              fontSize: 14,
+            ),
+          ),
+      );
+
+      final text = pageTexts[i].trim();
+
+      if (text.isEmpty) {
+        doc.addParagraph(
+          Paragraph()..addRun(Run(text: '[No selectable text found on this page]')),
+        );
+        continue;
+      }
+
+      for (final line in text.split(RegExp(r'\r?\n'))) {
+        final cleaned = line.trim();
+        if (cleaned.isEmpty) continue;
+
+        doc.addParagraph(
+          Paragraph()..addRun(Run(text: cleaned)),
+        );
+      }
+    }
+
+    await doc.save(_fs.file(outputPath));
+  }
+
+  Future<void> _writeXlsx(
+    List<String> pageTexts,
+    String outputPath,
+  ) async {
+    final workbook = await Workbook.create(_fs);
+    final sheet = workbook.addSheet('PDF Text');
+
+    sheet
+      .addRow()
+      ..addCell('Page')
+      ..addCell('Text');
+
+    for (var i = 0; i < pageTexts.length; i++) {
+      final lines = pageTexts[i]
+          .split(RegExp(r'\r?\n'))
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+
+      if (lines.isEmpty) {
+        sheet
+            .addRow()
+            ..addCell(i + 1)
+            ..addCell('[No selectable text found]');
+        continue;
+      }
+
+      for (final line in lines) {
+        sheet
+            .addRow()
+            ..addCell(i + 1)
+            ..addCell(line);
+      }
+    }
+
+    await workbook.save(_fs.file(outputPath));
+  }
+
+  Future<void> _writePptx(
+    List<String> pageTexts,
+    String outputPath,
+  ) async {
+    final presentation = await Presentation.create(_fs);
+
+    for (var i = 0; i < pageTexts.length; i++) {
+      final slide = presentation.addSlide();
+
+      slide.addTitle('Page ${i + 1}');
+
+      final text = pageTexts[i].trim();
+
+      slide.addText(
+        text.isEmpty
+            ? '[No selectable text found on this page]'
+            : text,
+      );
+    }
+
+    await presentation.save(_fs.file(outputPath));
+  }
+}

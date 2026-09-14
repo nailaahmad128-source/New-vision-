@@ -34,7 +34,7 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
         type: FileType.image,
         allowMultiple: false,
       );
-      final path = result?.files.single.path;
+      final path = result?.single.path;
       if (path == null) return;
       setState(() => _images.add(path));
       return;

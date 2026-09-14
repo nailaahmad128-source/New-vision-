@@ -69,7 +69,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (result == null || !mounted) return;
     final storage = context.read<FileStorageService>();
     final data = context.read<AppDataController>();
-    for (final f in result.files) {
+    for (final f in result) {
       if (f.path == null) continue;
       final copied = await storage.importIntoLibrary(File(f.path!), preferredName: f.name);
       final size = await storage.fileSize(copied);
@@ -86,7 +86,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Imported ${result.files.length} file(s)')));
+          SnackBar(content: Text('Imported ${result.length} file(s)')));
     }
   }
 
