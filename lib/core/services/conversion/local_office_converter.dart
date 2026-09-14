@@ -8,11 +8,11 @@ import '../file_storage_service.dart';
 import 'conversion_provider.dart';
 import 'conversion_types.dart';
 
-/// Local PDF -> Office conversion.
+/// Structure-aware local PDF -> Office conversion.
 ///
-/// This converter intentionally focuses on reliable, on-device
-/// PDF-to-Word, PDF-to-Excel and PDF-to-PowerPoint generation.
-/// No cloud service or API key is required.
+/// The converter reads PDF text together with its position, font size,
+/// font style and word boundaries. The extracted structure is then mapped
+/// independently to Word, Excel and PowerPoint.
 class LocalOfficeConverter implements ConversionProvider {
   const LocalOfficeConverter();
 
@@ -69,37 +69,22 @@ class LocalOfficeConverter implements ConversionProvider {
     final document = PdfDocument(inputBytes: bytes);
 
     try {
-      final extractor = PdfTextExtractor(document);
-      final pageTexts = <String>[];
-
-      for (var pageIndex = 0;
-          pageIndex < document.pages.count;
-          pageIndex++) {
-        final text = extractor
-            .extractText(
-              startPageIndex: pageIndex,
-              endPageIndex: pageIndex,
-              layoutText: true,
-            )
-            .trim();
-
-        pageTexts.add(text);
-      }
+      final pages = _extractPages(document);
 
       final tmpDirectory = await storage.tmpDir;
       final outputPath = '${tmpDirectory.path}/$outputFileName';
 
       switch (targetFormat) {
         case ConversionFormat.docx:
-          await _writeDocx(pageTexts, outputPath);
+          await _writeDocx(pages, outputPath);
           break;
 
         case ConversionFormat.xlsx:
-          await _writeXlsx(pageTexts, outputPath);
+          await _writeXlsx(pages, outputPath);
           break;
 
         case ConversionFormat.pptx:
-          await _writePptx(pageTexts, outputPath);
+          await _writePptx(pages, outputPath);
           break;
 
         case ConversionFormat.pdf:
@@ -130,215 +115,629 @@ class LocalOfficeConverter implements ConversionProvider {
     }
   }
 
+  List<_ConvertedPage> _extractPages(PdfDocument document) {
+    final extractor = PdfTextExtractor(document);
+    final pages = <_ConvertedPage>[];
+
+    for (var pageIndex = 0;
+        pageIndex < document.pages.count;
+        pageIndex++) {
+      final lines = extractor.extractTextLines(
+        startPageIndex: pageIndex,
+        endPageIndex: pageIndex,
+      );
+
+      final sortedLines = [...lines]
+        ..sort((a, b) {
+          final y = a.bounds.top.compareTo(b.bounds.top);
+          if (y != 0) return y;
+          return a.bounds.left.compareTo(b.bounds.left);
+        });
+
+      final pageSize = document.pages[pageIndex].getClientSize();
+
+      pages.add(
+        _ConvertedPage(
+          pageNumber: pageIndex + 1,
+          width: pageSize.width,
+          height: pageSize.height,
+          lines: sortedLines,
+        ),
+      );
+    }
+
+    return pages;
+  }
+
   Future<void> _writeDocx(
-    List<String> pageTexts,
+    List<_ConvertedPage> pages,
     String outputPath,
   ) async {
     final doc = await WordDocument.create(_fs);
 
-    doc.addParagraph(
-      Paragraph()
-        ..addRun(
-          Run(
-            text: 'Converted PDF Document',
-            bold: true,
-            fontSize: 22,
-          ),
-        ),
-    );
+    var wroteContent = false;
 
-    doc.addParagraph(
-      Paragraph()
-        ..addRun(
-          Run(
-            text: 'Generated locally by PDF Master Tools',
-            italic: true,
-            fontSize: 10,
-          ),
-        ),
-    );
+    for (final page in pages) {
+      if (page.lines.isEmpty) {
+        continue;
+      }
 
-    for (var pageIndex = 0; pageIndex < pageTexts.length; pageIndex++) {
+      final paragraphs = _groupIntoParagraphs(page.lines);
+
+      for (final group in paragraphs) {
+        if (group.isEmpty) continue;
+
+        final paragraph = Paragraph();
+
+        for (var lineIndex = 0;
+            lineIndex < group.length;
+            lineIndex++) {
+          final line = group[lineIndex];
+
+          final words = [...line.wordCollection]
+            ..sort(
+              (a, b) => a.bounds.left.compareTo(
+                b.bounds.left,
+              ),
+            );
+
+          if (words.isEmpty) {
+            final text = line.text.trim();
+
+            if (text.isNotEmpty) {
+              paragraph.addRun(
+                Run(
+                  text: text,
+                  bold: _isBold(line.fontStyle) ||
+                      _looksLikeHeading(
+                        text,
+                        _safeFontSize(line.fontSize),
+                        page.lines,
+                      ),
+                  italic: _isItalic(line.fontStyle),
+                  fontSize: _safeFontSize(line.fontSize),
+                ),
+              );
+
+              wroteContent = true;
+            }
+
+            continue;
+          }
+
+          for (var wordIndex = 0;
+              wordIndex < words.length;
+              wordIndex++) {
+            final word = words[wordIndex];
+            final text = word.text.trim();
+
+            if (text.isEmpty) continue;
+
+            // Preserve a normal word gap. If the PDF has a visibly
+            // larger gap, preserve it with additional spaces.
+            if (wordIndex > 0) {
+              final previous = words[wordIndex - 1];
+
+              final gap =
+                  word.bounds.left -
+                  previous.bounds.right;
+
+              final previousWidth =
+                  previous.bounds.width <= 0
+                      ? 10.0
+                      : previous.bounds.width;
+
+              if (gap > previousWidth * 0.65) {
+                paragraph.addRun(
+                  Run(text: '  '),
+                );
+              } else {
+                paragraph.addRun(
+                  Run(text: ' '),
+                );
+              }
+            }
+
+            paragraph.addRun(
+              Run(
+                text: text,
+                bold: _isBold(word.fontStyle),
+                italic: _isItalic(word.fontStyle),
+                fontSize: _safeFontSize(word.fontSize),
+              ),
+            );
+
+            wroteContent = true;
+          }
+
+          // Keep separate PDF lines inside the same logical paragraph
+          // visually readable without destroying paragraph grouping.
+          if (lineIndex < group.length - 1) {
+            paragraph.addRun(
+              Run(text: ' '),
+            );
+          }
+        }
+
+        doc.addParagraph(paragraph);
+      }
+    }
+
+    if (!wroteContent) {
       doc.addParagraph(
         Paragraph()
           ..addRun(
             Run(
-              text: 'Page ${pageIndex + 1}',
-              bold: true,
-              fontSize: 16,
+              text: 'No selectable text was found in this PDF.',
+              italic: true,
+              fontSize: 11,
             ),
           ),
       );
-
-      final pageText = pageTexts[pageIndex].trim();
-
-      if (pageText.isEmpty) {
-        doc.addParagraph(
-          Paragraph()
-            ..addRun(
-              Run(
-                text: '[No selectable text found on this page]',
-                italic: true,
-              ),
-            ),
-        );
-        continue;
-      }
-
-      final lines = pageText
-          .split(RegExp(r'\r?\n'))
-          .map((line) => line.trim())
-          .where((line) => line.isNotEmpty)
-          .toList();
-
-      for (final line in lines) {
-        if (_looksLikeHeading(line)) {
-          doc.addParagraph(
-            Paragraph()
-              ..addRun(
-                Run(
-                  text: line,
-                  bold: true,
-                  fontSize: 13,
-                ),
-              ),
-          );
-        } else {
-          doc.addParagraph(
-            Paragraph()..addRun(
-              Run(
-                text: line,
-                fontSize: 11,
-              ),
-            ),
-          );
-        }
-      }
     }
 
     await doc.save(_fs.file(outputPath));
   }
 
+  List<List<TextLine>> _groupIntoParagraphs(
+    List<TextLine> lines,
+  ) {
+    if (lines.isEmpty) return const [];
+
+    final result = <List<TextLine>>[];
+    var current = <TextLine>[lines.first];
+
+    for (var i = 1; i < lines.length; i++) {
+      final previous = lines[i - 1];
+      final next = lines[i];
+
+      final verticalGap =
+          next.bounds.top - previous.bounds.bottom;
+
+      final leftShift =
+          (next.bounds.left - previous.bounds.left).abs();
+
+      final previousHeight =
+          previous.bounds.height <= 0
+              ? 10.0
+              : previous.bounds.height;
+
+      final sameParagraph =
+          verticalGap <= previousHeight * 1.45 &&
+          leftShift <= 45;
+
+      if (sameParagraph) {
+        current.add(next);
+      } else {
+        result.add(current);
+        current = <TextLine>[next];
+      }
+    }
+
+    result.add(current);
+    return result;
+  }
+
   Future<void> _writeXlsx(
-    List<String> pageTexts,
+    List<_ConvertedPage> pages,
     String outputPath,
   ) async {
     final workbook = await Workbook.create(_fs);
-    final sheet = workbook.addSheet('PDF Text');
 
-    sheet.addRow()
-      ..addCell('Page')
-      ..addCell('Line')
-      ..addCell('Text');
+    var createdSheet = false;
 
-    for (var pageIndex = 0; pageIndex < pageTexts.length; pageIndex++) {
-      final pageText = pageTexts[pageIndex].trim();
-
-      if (pageText.isEmpty) {
-        sheet.addRow()
-          ..addCell(pageIndex + 1)
-          ..addCell(1)
-          ..addCell('[No selectable text found]');
+    for (final page in pages) {
+      if (page.lines.isEmpty) {
         continue;
       }
 
-      final lines = pageText
-          .split(RegExp(r'\r?\n'))
-          .map((line) => line.trim())
-          .where((line) => line.isNotEmpty)
-          .toList();
+      final sheet = workbook.addSheet(
+        _sheetName('Page ${page.pageNumber}'),
+      );
 
-      if (lines.isEmpty) {
-        sheet.addRow()
-          ..addCell(pageIndex + 1)
-          ..addCell(1)
-          ..addCell('[No selectable text found]');
-        continue;
-      }
+      createdSheet = true;
 
-      for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      if (_looksLikeTable(page.lines)) {
+        final rows = _buildTableRows(page.lines);
+
+        for (final values in rows) {
+          final row = sheet.addRow();
+
+          for (final value in values) {
+            row.addCell(
+              _excelCellValue(value),
+            );
+          }
+        }
+      } else {
+        // For normal paragraphs, do not pretend that every PDF line
+        // is a table. Keep one clean text column.
         sheet.addRow()
-          ..addCell(pageIndex + 1)
-          ..addCell(lineIndex + 1)
-          ..addCell(lines[lineIndex]);
+          ..addCell('Text');
+
+        for (final line in page.lines) {
+          final text = line.text.trim();
+
+          if (text.isEmpty) continue;
+
+          sheet.addRow()
+            ..addCell(text);
+        }
       }
+    }
+
+    if (!createdSheet) {
+      final sheet = workbook.addSheet('PDF Text');
+
+      sheet.addRow()
+        ..addCell('No selectable text found in this PDF.');
     }
 
     await workbook.save(_fs.file(outputPath));
   }
 
+  dynamic _excelCellValue(String value) {
+    final text = value.trim();
+
+    if (text.isEmpty) {
+      return '';
+    }
+
+    final normalized =
+        text.replaceAll(',', '').replaceAll(' ', '');
+
+    final integerValue = int.tryParse(normalized);
+
+    if (integerValue != null) {
+      return integerValue;
+    }
+
+    final doubleValue = double.tryParse(normalized);
+
+    if (doubleValue != null) {
+      return doubleValue;
+    }
+
+    if (text.toLowerCase() == 'true') {
+      return true;
+    }
+
+    if (text.toLowerCase() == 'false') {
+      return false;
+    }
+
+    return text;
+  }
+
+  bool _looksLikeTable(List<TextLine> lines) {
+    final usable = lines
+        .where(
+          (line) => line.wordCollection.length >= 2,
+        )
+        .toList();
+
+    if (usable.length < 3) {
+      return false;
+    }
+
+    // A real table normally has repeated vertical starting positions.
+    final xPositions = <double>[];
+
+    for (final line in usable) {
+      for (final word in line.wordCollection) {
+        xPositions.add(word.bounds.left);
+      }
+    }
+
+    if (xPositions.length < 6) {
+      return false;
+    }
+
+    xPositions.sort();
+
+    final clusters = <double>[];
+
+    for (final x in xPositions) {
+      if (clusters.isEmpty ||
+          (x - clusters.last).abs() > 16) {
+        clusters.add(x);
+      }
+    }
+
+    if (clusters.length < 2) {
+      return false;
+    }
+
+    var repeatedColumns = 0;
+
+    for (final columnX in clusters) {
+      var lineCount = 0;
+
+      for (final line in usable) {
+        if (line.wordCollection.any(
+          (word) =>
+              (word.bounds.left - columnX).abs() <= 16,
+        )) {
+          lineCount++;
+        }
+      }
+
+      if (lineCount >= 3) {
+        repeatedColumns++;
+      }
+    }
+
+    // Require at least two repeated columns and enough rows
+    // before classifying the page as a table.
+    return repeatedColumns >= 2 &&
+        usable.length >= 3;
+  }
+
+  List<List<String>> _buildTableRows(
+    List<TextLine> lines,
+  ) {
+    final usable = lines
+        .where(
+          (line) => line.wordCollection.isNotEmpty,
+        )
+        .toList();
+
+    if (usable.isEmpty) {
+      return const [];
+    }
+
+    // First group nearby PDF lines into visual rows using Y position.
+    final visualRows = <List<TextWord>>[];
+
+    for (final line in usable) {
+      final words = [...line.wordCollection]
+        ..sort(
+          (a, b) => a.bounds.left.compareTo(
+            b.bounds.left,
+          ),
+        );
+
+      if (words.isEmpty) continue;
+
+      List<TextWord>? target;
+
+      for (final row in visualRows) {
+        final referenceY = row.first.bounds.top;
+
+        if ((line.bounds.top - referenceY).abs() <=
+            (line.bounds.height.clamp(8, 24)) * 0.75) {
+          target = row;
+          break;
+        }
+      }
+
+      if (target == null) {
+        visualRows.add([...words]);
+      } else {
+        target.addAll(words);
+      }
+    }
+
+    for (final row in visualRows) {
+      row.sort(
+        (a, b) => a.bounds.left.compareTo(
+          b.bounds.left,
+        ),
+      );
+    }
+
+    // Detect stable column starts from all visual rows.
+    final positions = <double>[];
+
+    for (final row in visualRows) {
+      for (final word in row) {
+        positions.add(word.bounds.left);
+      }
+    }
+
+    positions.sort();
+
+    final columns = <double>[];
+
+    for (final x in positions) {
+      if (columns.isEmpty ||
+          (x - columns.last).abs() > 16) {
+        columns.add(x);
+      }
+    }
+
+    final rows = <List<String>>[];
+
+    for (final rowWords in visualRows) {
+      final cells = List<String>.filled(
+        columns.length,
+        '',
+      );
+
+      for (final word in rowWords) {
+        var nearest = 0;
+        var distance =
+            (word.bounds.left - columns[0]).abs();
+
+        for (var i = 1; i < columns.length; i++) {
+          final current =
+              (word.bounds.left - columns[i]).abs();
+
+          if (current < distance) {
+            distance = current;
+            nearest = i;
+          }
+        }
+
+        final text = word.text.trim();
+
+        if (text.isEmpty) continue;
+
+        if (cells[nearest].isEmpty) {
+          cells[nearest] = text;
+        } else {
+          cells[nearest] =
+              '${cells[nearest]} $text';
+        }
+      }
+
+      while (cells.isNotEmpty &&
+          cells.last.trim().isEmpty) {
+        cells.removeLast();
+      }
+
+      if (cells.isNotEmpty &&
+          cells.any((value) => value.isNotEmpty)) {
+        rows.add(cells);
+      }
+    }
+
+    return rows;
+  }
+
   Future<void> _writePptx(
-    List<String> pageTexts,
+    List<_ConvertedPage> pages,
     String outputPath,
   ) async {
     final presentation = await Presentation.create(_fs);
 
-    for (var pageIndex = 0; pageIndex < pageTexts.length; pageIndex++) {
+    for (final page in pages) {
       final slide = presentation.addSlide();
 
-      slide.addTitle('Page ${pageIndex + 1}');
-
-      final pageText = pageTexts[pageIndex].trim();
-
-      if (pageText.isEmpty) {
+      if (page.lines.isEmpty) {
+        slide.addTitle('Page ${page.pageNumber}');
         slide.addText(
-          '[No selectable text found on this page]',
+          'No selectable text was found on this PDF page.',
         );
         slide.addNote(
-          'This slide was generated from PDF page ${pageIndex + 1}.',
+          'Generated from PDF page ${page.pageNumber}.',
         );
         continue;
       }
 
-      final lines = pageText
-          .split(RegExp(r'\r?\n'))
-          .map((line) => line.trim())
-          .where((line) => line.isNotEmpty)
-          .toList();
+      // Recreate the PDF page as editable, independently positioned
+      // PowerPoint text boxes. PDF points are converted to EMUs.
+      for (final line in page.lines) {
+        final text = line.text.trim();
 
-      if (lines.isEmpty) {
-        slide.addText(
-          '[No selectable text found on this page]',
+        if (text.isEmpty) continue;
+
+        final x = _pointsToEmu(line.bounds.left);
+        final y = _pointsToEmu(line.bounds.top);
+
+        final width = _pointsToEmu(
+          line.bounds.width < 20
+              ? 120
+              : line.bounds.width,
         );
-      } else {
-        final text = lines.join('\n');
-        slide.addText(text);
+
+        final height = _pointsToEmu(
+          line.bounds.height < 10
+              ? _safeFontSize(line.fontSize) * 1.8
+              : line.bounds.height * 1.8,
+        );
+
+        slide.addTextBox(
+          text: text,
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+          fontSize: _safeFontSize(line.fontSize),
+          bold: _isBold(line.fontStyle),
+          italic: _isItalic(line.fontStyle),
+        );
       }
 
       slide.addNote(
-        'This slide was generated from PDF page ${pageIndex + 1}.',
+        'Generated from PDF page ${page.pageNumber}. '
+        'Text boxes remain editable in PowerPoint.',
       );
+    }
+
+    if (pages.isEmpty) {
+      final slide = presentation.addSlide();
+      slide.addTitle('PDF Conversion');
+      slide.addText('The PDF contains no pages.');
     }
 
     await presentation.save(_fs.file(outputPath));
   }
 
-  bool _looksLikeHeading(String text) {
+  bool _looksLikeHeading(
+    String text,
+    double fontSize,
+    List<TextLine> pageLines,
+  ) {
     final value = text.trim();
 
-    if (value.isEmpty || value.length > 90) {
+    if (value.isEmpty || value.length > 100) {
       return false;
     }
 
-    if (value.endsWith('.') ||
-        value.endsWith(',') ||
-        value.endsWith(';') ||
-        value.endsWith(':')) {
-      return false;
-    }
+    final averageFont = pageLines.isEmpty
+        ? 11.0
+        : pageLines
+                .map((line) => _safeFontSize(line.fontSize))
+                .reduce((a, b) => a + b) /
+            pageLines.length;
 
-    final words = value.split(RegExp(r'\s+'));
+    final shortEnough =
+        value.split(RegExp(r'\s+')).length <= 14;
 
-    if (words.length > 12) {
-      return false;
-    }
-
-    final hasLetters = RegExp(r'[A-Za-z\u0600-\u06FF]').hasMatch(value);
-
-    if (!hasLetters) {
-      return false;
-    }
-
-    return value.length <= 60;
+    return shortEnough &&
+        (fontSize >= averageFont * 1.18 ||
+            value.length <= 55);
   }
+
+  bool _isBold(List<PdfFontStyle> styles) {
+    return styles.contains(PdfFontStyle.bold);
+  }
+
+  bool _isItalic(List<PdfFontStyle> styles) {
+    return styles.contains(PdfFontStyle.italic);
+  }
+
+  double _safeFontSize(double value) {
+    if (value.isNaN || value.isInfinite) {
+      return 11;
+    }
+
+    return value.clamp(7.0, 48.0).toDouble();
+  }
+
+  int _pointsToEmu(double points) {
+    final value = (points * 12700).round();
+
+    if (value < 10000) {
+      return 10000;
+    }
+
+    return value;
+  }
+
+  String _sheetName(String value) {
+    final cleaned = value
+        .replaceAll(RegExp(r'[\\/:?*\[\]]'), '_');
+
+    if (cleaned.length <= 31) {
+      return cleaned;
+    }
+
+    return cleaned.substring(0, 31);
+  }
+}
+
+class _ConvertedPage {
+  final int pageNumber;
+  final double width;
+  final double height;
+  final List<TextLine> lines;
+
+  const _ConvertedPage({
+    required this.pageNumber,
+    required this.width,
+    required this.height,
+    required this.lines,
+  });
 }
