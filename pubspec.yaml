@@ -60,7 +60,7 @@ dependencies:
   collection: ^1.19.0
 
   # App version info for Settings
-  package_info_plus: ^9.0.1
+  package_info_plus: ^10.0.0
 
   # OCR
   google_mlkit_text_recognition: ^0.15.0
