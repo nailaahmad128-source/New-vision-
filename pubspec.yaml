@@ -22,12 +22,12 @@ dependencies:
   path: ^1.9.0
 
   # PDF engine: merge / split / reorder / rotate / security / fill forms
-  syncfusion_flutter_pdf: ^33.2.12
+  syncfusion_flutter_pdf: ^34.2.7
   # PDF viewer for the reader screen
-  syncfusion_flutter_pdfviewer: ^33.2.12
+  syncfusion_flutter_pdfviewer: ^34.2.7
   # Explicit dependency (not just transitive) since main.dart calls
   # SyncfusionLicense.registerLicense() directly — see AppConfig.
-  syncfusion_flutter_core: ^33.2.12
+  syncfusion_flutter_core: ^34.2.7
   # Rasterizing PDF pages <-> images (PDF to Image, thumbnails, compression re-encode)
   printing: ^5.13.1
   pdf: ^3.11.1
@@ -97,3 +97,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icons/
+
+
+dependency_overrides:
+  xml: ^7.0.1
