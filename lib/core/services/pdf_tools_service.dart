@@ -117,6 +117,91 @@ class PdfToolsService {
     return outputs;
   }
 
+  /// Creates a new PDF containing only the selected page indexes.
+  /// [pageIndexes] are 0-based and are kept in the supplied order.
+  Future<File> extractPages(
+    String path, {
+    required List<int> pageIndexes,
+    required String outputName,
+  }) async {
+    return _rebuildWithPageIndexes(
+      path,
+      pageIndexes: pageIndexes,
+      outputName: outputName,
+    );
+  }
+
+  /// Creates a new PDF with the selected page indexes removed.
+  /// [pageIndexes] are 0-based.
+  Future<File> deletePages(
+    String path, {
+    required List<int> pageIndexes,
+    required String outputName,
+  }) async {
+    final src = PdfDocument(inputBytes: await File(path).readAsBytes());
+    final selected = pageIndexes.toSet();
+
+    final remaining = <int>[
+      for (var i = 0; i < src.pages.count; i++)
+        if (!selected.contains(i)) i,
+    ];
+
+    src.dispose();
+
+    if (remaining.isEmpty) {
+      throw StateError('At least one page must remain in the PDF.');
+    }
+
+    return _rebuildWithPageIndexes(
+      path,
+      pageIndexes: remaining,
+      outputName: outputName,
+    );
+  }
+
+  Future<File> _rebuildWithPageIndexes(
+    String path, {
+    required List<int> pageIndexes,
+    required String outputName,
+  }) async {
+    if (pageIndexes.isEmpty) {
+      throw StateError('No pages were selected.');
+    }
+
+    final src = PdfDocument(inputBytes: await File(path).readAsBytes());
+    final out = PdfDocument();
+    out.pageSettings.margins.all = 0;
+
+    for (final index in pageIndexes) {
+      if (index < 0 || index >= src.pages.count) continue;
+
+      final sourcePage = src.pages[index];
+      final template = sourcePage.createTemplate();
+      final page = out.pages.add();
+
+      page.graphics.drawPdfTemplate(
+        template,
+        const Offset(0, 0),
+        sourcePage.size,
+      );
+    }
+
+    if (out.pages.count == 0) {
+      out.dispose();
+      src.dispose();
+      throw StateError('No valid pages were selected.');
+    }
+
+    final bytes = await out.save();
+
+    out.dispose();
+    src.dispose();
+
+    final file = await storage.newTmpFile(outputName);
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
   /// Rebuild a document with pages in [newOrder] (0-indexed positions into
   /// the original document).
   Future<File> reorder(String path, List<int> newOrder, {required String outputName}) async {
