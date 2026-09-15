@@ -7,6 +7,7 @@ import 'image_to_pdf_screen.dart';
 import 'pdf_to_image_screen.dart';
 import 'pdf_to_long_image_screen.dart';
 import 'pdf_extract_text_screen.dart';
+import 'page_selection_tool_screen.dart';
 import 'reorder_screen.dart';
 import 'rotate_screen.dart';
 import 'fill_screen.dart';
@@ -41,6 +42,12 @@ void openTool(BuildContext context, ToolId id) {
     ToolId.textToSpeech => const TextToSpeechScreen(),
     ToolId.ocrImageToText => const OcrPickerScreen(),
     ToolId.extractText => const PdfExtractTextScreen(),
+    ToolId.extractPages => const PageSelectionToolScreen(
+        mode: PageSelectionMode.extract,
+    ),
+    ToolId.deletePages => const PageSelectionToolScreen(
+        mode: PageSelectionMode.delete,
+    ),
     ToolId.pdfToWord => const OfficeConversionScreen(
         toolId: ToolId.pdfToWord, sourceFormat: ConversionFormat.pdf, targetFormat: ConversionFormat.docx, title: 'PDF to Word'),
     ToolId.wordToPdf => const OfficeConversionScreen(

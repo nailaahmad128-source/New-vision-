@@ -65,7 +65,7 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
     setState(() {
       _path = images.first.path;
       _error = null;
-      _phase = 'Gallery image selected';
+      _phase = null;
     });
   }
 
@@ -78,9 +78,9 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
       if (file == null) return;
 
       setState(() {
-        _path = file.path;
+        _path = file;
         _error = null;
-        _phase = 'Scanned image selected';
+        _phase = null;
       });
     } catch (e) {
       if (!mounted) return;
