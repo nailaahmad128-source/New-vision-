@@ -95,7 +95,7 @@ class ToolsScreen extends StatelessWidget {
                 title: 'PDF Extract',
                 icon: Icons.content_cut_rounded,
                 color: AppColors.toolSplit,
-                onTap: () => openTool(context, ToolId.split),
+                onTap: () => openTool(context, ToolId.extractText),
               ),
               _ToolItem(
                 title: 'Reorder Pages',

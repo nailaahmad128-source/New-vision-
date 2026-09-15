@@ -4,6 +4,7 @@ import 'package:file/local.dart';
 import 'package:open_xml/open_xml.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
+import '../../../features/ocr/services/ocr_service_io.dart';
 import '../file_storage_service.dart';
 import 'conversion_provider.dart';
 import 'conversion_types.dart';
@@ -56,6 +57,79 @@ class LocalOfficeConverter implements ConversionProvider {
       throw const ConversionException(
         'The selected PDF file was not found.',
       );
+    }
+
+
+    final extension = sourcePath.toLowerCase().split('.').last;
+
+    final isImage = const {
+      'jpg',
+      'jpeg',
+      'png',
+      'webp',
+      'heic',
+      'heif',
+    }.contains(extension);
+
+    // Gallery / Scan image -> OCR -> editable Office file.
+    if (isImage) {
+      final tmpDirectory = await storage.tmpDir;
+      final outputPath = '${tmpDirectory.path}/$outputFileName';
+
+      final ocr = OcrService();
+
+      try {
+        onPhase?.call(ConversionPhase.converting);
+
+        final text = await ocr.extractText(sourcePath);
+
+        if (text.trim().isEmpty) {
+          throw const ConversionException(
+            'No readable text was found in this image. Please use a clearer image or scan.',
+          );
+        }
+
+        switch (targetFormat) {
+          case ConversionFormat.docx:
+            await _writeDocxFromOcrText(
+              text,
+              outputPath,
+            );
+            break;
+
+          case ConversionFormat.xlsx:
+            await _writeXlsxFromOcrText(
+              text,
+              outputPath,
+            );
+            break;
+
+          case ConversionFormat.pptx:
+            await _writePptxFromOcrText(
+              text,
+              outputPath,
+            );
+            break;
+
+          case ConversionFormat.pdf:
+            throw const ConversionException(
+              'PDF is already the source format.',
+            );
+        }
+
+        final result = File(outputPath);
+
+        if (!await result.exists() ||
+            await result.length() == 0) {
+          throw const ConversionException(
+            'OCR conversion did not produce a valid output file.',
+          );
+        }
+
+        return result;
+      } finally {
+        await ocr.dispose();
+      }
     }
 
     final bytes = await sourceFile.readAsBytes();
@@ -660,6 +734,199 @@ class LocalOfficeConverter implements ConversionProvider {
     }
 
     await presentation.save(_fs.file(outputPath));
+  }
+
+
+  // =========================================================
+  // IMAGE OCR -> WORD
+  // =========================================================
+  Future<void> _writeDocxFromOcrText(
+    String text,
+    String outputPath,
+  ) async {
+    final doc = await WordDocument.create(_fs);
+
+    final normalized = text
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .trim();
+
+    final blocks = normalized
+        .split(RegExp(r'\n\s*\n+'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    var wrote = false;
+
+    for (final block in blocks) {
+      final paragraph = Paragraph();
+
+      final lines = block
+          .split('\n')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+
+      for (var i = 0; i < lines.length; i++) {
+        if (i > 0) {
+          paragraph.addRun(Run(text: ' '));
+        }
+
+        paragraph.addRun(
+          Run(
+            text: lines[i],
+            fontSize: 11,
+          ),
+        );
+      }
+
+      doc.addParagraph(paragraph);
+      wrote = true;
+    }
+
+    if (!wrote) {
+      doc.addParagraph(
+        Paragraph()
+          ..addRun(
+            Run(
+              text: 'No readable text was found.',
+              italic: true,
+              fontSize: 11,
+            ),
+          ),
+      );
+    }
+
+    await doc.save(_fs.file(outputPath));
+  }
+
+
+  // =========================================================
+  // IMAGE OCR -> EXCEL
+  // =========================================================
+  Future<void> _writeXlsxFromOcrText(
+    String text,
+    String outputPath,
+  ) async {
+    final workbook = await Workbook.create(_fs);
+    final sheet = workbook.addSheet('Extracted Text');
+
+    final normalized = text
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .trim();
+
+    if (normalized.isEmpty) {
+      sheet.addRow()
+        ..addCell('No readable text was found.');
+
+      await workbook.save(_fs.file(outputPath));
+      return;
+    }
+
+    final lines = normalized
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    final hasTabs = lines.any((e) => e.contains('\t'));
+    final hasPipes = lines.any((e) => e.contains('|'));
+
+    if (hasTabs || hasPipes) {
+      for (final line in lines) {
+        final parts = hasTabs
+            ? line.split('\t')
+            : line.split('|');
+
+        final row = sheet.addRow();
+
+        for (final part in parts) {
+          row.addCell(
+            _excelCellValue(part.trim()),
+          );
+        }
+      }
+    } else {
+      sheet.addRow()
+        ..addCell('Extracted Text');
+
+      for (final line in lines) {
+        sheet.addRow()
+          ..addCell(
+            _excelCellValue(line),
+          );
+      }
+    }
+
+    await workbook.save(_fs.file(outputPath));
+  }
+
+
+  // =========================================================
+  // IMAGE OCR -> POWERPOINT
+  // =========================================================
+  Future<void> _writePptxFromOcrText(
+    String text,
+    String outputPath,
+  ) async {
+    final presentation = await Presentation.create(_fs);
+
+    final normalized = text
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .trim();
+
+    final lines = normalized
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    if (lines.isEmpty) {
+      final slide = presentation.addSlide();
+
+      slide.addTitle('Extracted Text');
+      slide.addText('No readable text was found.');
+
+      await presentation.save(
+        _fs.file(outputPath),
+      );
+
+      return;
+    }
+
+    var slide = presentation.addSlide();
+
+    slide.addTitle('Extracted Text');
+
+    var y = 850000;
+
+    for (final line in lines) {
+      const height = 520000;
+
+      if (y + height > 6500000) {
+        slide = presentation.addSlide();
+        slide.addTitle('Extracted Text');
+        y = 850000;
+      }
+
+      slide.addTextBox(
+        text: line,
+        x: 700000,
+        y: y,
+        width: 9000000,
+        height: height,
+        fontSize: 18,
+      );
+
+      y += height + 70000;
+    }
+
+    await presentation.save(
+      _fs.file(outputPath),
+    );
   }
 
   bool _looksLikeHeading(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
@@ -7,6 +8,7 @@ import '../../../core/services/conversion/conversion_service.dart';
 import '../../../core/services/conversion/conversion_types.dart';
 import '../../../core/services/file_storage_service.dart';
 import '../../../core/storage/app_data_controller.dart';
+import '../../../core/services/image_capture.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../widgets/source_picker.dart';
 import '../widgets/professional_tool_page.dart';
@@ -50,6 +52,44 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
     _path = widget.initialSourcePath;
   }
 
+  Future<void> _pickGalleryImage() async {
+    if (_working) return;
+
+    final picker = ImagePicker();
+    final images = await picker.pickMultiImage(
+      imageQuality: 100,
+    );
+
+    if (images.isEmpty) return;
+
+    setState(() {
+      _path = images.first.path;
+      _error = null;
+      _phase = 'Gallery image selected';
+    });
+  }
+
+  Future<void> _pickScanImage() async {
+    if (_working) return;
+
+    try {
+      final file = await pickImageFromCamera();
+
+      if (file == null) return;
+
+      setState(() {
+        _path = file.path;
+        _error = null;
+        _phase = 'Scanned image selected';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Could not open camera: $e';
+      });
+    }
+  }
+
   Future<void> _pickFile() async {
     final picked = await pickSourceFiles(
       context,
@@ -66,16 +106,24 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
   Future<void> _convert() async {
     final path = _path;
     if (path == null) return;
+
     setState(() {
       _working = true;
       _error = null;
       _phase = ConversionPhase.uploading;
     });
+
     try {
       final storage = context.read<FileStorageService>();
       final provider = resolveConversionProvider();
+
       final baseName = p.basenameWithoutExtension(path);
-      final outName = '$baseName${widget.targetFormat.fileExtension}';
+
+      // Keep images as images.
+      // LocalOfficeConverter detects image input and runs:
+      // Image -> OCR -> editable Word / Excel / PowerPoint.
+      final outName =
+          '$baseName${widget.targetFormat.fileExtension}';
 
       final file = await provider.convert(
         sourcePath: path,
@@ -84,37 +132,56 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
         outputFileName: outName,
         storage: storage,
         onPhase: (phase) {
-          if (mounted) setState(() => _phase = phase);
+          if (mounted) {
+            setState(() => _phase = phase);
+          }
         },
       );
 
       final data = context.read<AppDataController>();
-    final doc = await data.registerToolResult(
+
+      final doc = await data.registerToolResult(
         tmpFile: file,
         fileName: outName,
         toolId: widget.toolId.name,
         toolTitle: '${widget.title}: $baseName',
         type: widget.targetFormat.apiFormat,
       );
+
       if (!mounted) return;
+
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => ToolResultScreen(results: [doc], successTitle: 'Converted!')),
+        MaterialPageRoute(
+          builder: (_) => ToolResultScreen(
+            results: [doc],
+            successTitle: 'Converted!',
+          ),
+        ),
       );
-      setState(() => _path = widget.initialSourcePath);
+
+      setState(() {
+        _path = widget.initialSourcePath;
+      });
     } on ConversionException catch (e) {
       if (!mounted) return;
+
       setState(() {
         _error = e.message;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'Conversion failed: $e');
-    } finally {
-      if (mounted) setState(() {
-        _working = false;
-        _phase = null;
+
+      setState(() {
+        _error = 'Conversion failed: $e';
       });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _working = false;
+          _phase = null;
+        });
+      }
     }
   }
 
@@ -147,15 +214,29 @@ class _OfficeConversionScreenState extends State<OfficeConversionScreen> {
                 ),
                 const SizedBox(height: 16),
                 ProfessionalActionGrid(
-                  children: [
-                    ProfessionalAction(
-                      title: 'Device',
-                      subtitle: 'Choose ${widget.sourceFormat.displayName}',
-                      icon: Icons.folder_rounded,
-                      onTap: _pickFile,
-                    ),
-                  ],
+              children: [
+                if (widget.sourceFormat == ConversionFormat.pdf)
+                  ProfessionalAction(
+                    title: 'Gallery',
+                    subtitle: 'Choose image',
+                    icon: Icons.photo_library_rounded,
+                    onTap: _pickGalleryImage,
+                  ),
+                ProfessionalAction(
+                  title: 'Device',
+                  subtitle: 'Choose ${widget.sourceFormat.displayName}',
+                  icon: Icons.folder_rounded,
+                  onTap: _pickFile,
                 ),
+                if (widget.sourceFormat == ConversionFormat.pdf)
+                  ProfessionalAction(
+                    title: 'Scan',
+                    subtitle: 'Scan document',
+                    icon: Icons.document_scanner_rounded,
+                    onTap: _pickScanImage,
+                  ),
+              ],
+            ),
                 const SizedBox(height: 14),
                 Container(
                   padding: const EdgeInsets.all(12),

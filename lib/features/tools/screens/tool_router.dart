@@ -6,6 +6,7 @@ import 'compress_screen.dart';
 import 'image_to_pdf_screen.dart';
 import 'pdf_to_image_screen.dart';
 import 'pdf_to_long_image_screen.dart';
+import 'pdf_extract_text_screen.dart';
 import 'reorder_screen.dart';
 import 'rotate_screen.dart';
 import 'fill_screen.dart';
@@ -39,6 +40,7 @@ void openTool(BuildContext context, ToolId id) {
     ToolId.translate => const TranslationScreen(initialText: ''),
     ToolId.textToSpeech => const TextToSpeechScreen(),
     ToolId.ocrImageToText => const OcrPickerScreen(),
+    ToolId.extractText => const PdfExtractTextScreen(),
     ToolId.pdfToWord => const OfficeConversionScreen(
         toolId: ToolId.pdfToWord, sourceFormat: ConversionFormat.pdf, targetFormat: ConversionFormat.docx, title: 'PDF to Word'),
     ToolId.wordToPdf => const OfficeConversionScreen(
