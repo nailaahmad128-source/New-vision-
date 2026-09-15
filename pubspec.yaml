@@ -101,3 +101,5 @@ flutter:
 
 dependency_overrides:
   xml: ^7.0.1
+
+  objective_c: 9.6.0
