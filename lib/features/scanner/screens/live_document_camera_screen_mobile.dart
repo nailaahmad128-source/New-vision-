@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
+import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart' as mlkit;
 import 'package:image_picker/image_picker.dart';
 
 enum ScannerMode {
@@ -71,17 +71,17 @@ class _LiveDocumentCameraScreenState
        * One page is returned to the existing SmartScanner page.
        * Additional pages can be added from SmartScanner.
        */
-      final options = DocumentScannerOptions(
+      final options = mlkit.DocumentScannerOptions(
         documentFormats: const {
-          DocumentFormat.jpeg,
-          DocumentFormat.pdf,
+          mlkit.DocumentFormat.jpeg,
+          mlkit.DocumentFormat.pdf,
         },
-        mode: ScannerMode.full,
+        mode: mlkit.ScannerMode.full,
         pageLimit: 1,
         isGalleryImport: true,
       );
 
-      final scanner = DocumentScanner(
+      final scanner = mlkit.DocumentScanner(
         options: options,
       );
 

@@ -2,12 +2,13 @@ name: Build Android
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   build:
-    name: Analyze & Build
+    name: Analyze & Build Release
     runs-on: ubuntu-latest
 
     steps:
@@ -36,11 +37,22 @@ jobs:
         continue-on-error: true
         run: flutter analyze
 
-      - name: Build Debug APK
+      - name: Build Release APK
         run: flutter build apk --release
 
-      - name: Upload APK
+      - name: Build Release AAB
+        run: flutter build appbundle --release
+
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
           name: ScanFlow-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Upload Release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScanFlow-release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
