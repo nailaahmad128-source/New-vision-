@@ -4,7 +4,7 @@
          so the splash screen, launcher icon, and in-app UI all share one teal
          brand color instead of the old indigo (#5B4FE9 / #3730A3) left over
          from before the ScanFlow rebrand. -->
-    <color name="launch_background_color">#16A67A</color>
+    <color name="launch_background_color">#FFFFFF</color>
     <color name="brand_primary">#16A67A</color>
     <color name="normal_background">#F7F7FB</color>
     <color name="normal_background_dark">#0E0D18</color>
