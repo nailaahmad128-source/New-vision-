@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:gal/gal.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -397,6 +398,64 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     final doc = context.read<AppDataController>().documentById(id);
     if (doc == null) return;
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => TextExtractionScreen(imagePath: doc.filePath, documentId: doc.id)));
+  }
+
+  Future<void> _saveToGallery() async {
+    if (_processed == null) return;
+
+    setState(() => _processing = true);
+    try {
+      final bytes = _pages.isEmpty
+          ? _processed!
+          : _pages[_selectedPage.clamp(0, _pages.length - 1)];
+
+      final hasAccess = await Gal.hasAccess();
+      if (!hasAccess) {
+        final granted = await Gal.requestAccess();
+        if (!granted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Gallery permission is required to save the image.'),
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      final now = DateTime.now();
+      final name =
+          'ScanFlow_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+
+      await Gal.putImageBytes(
+        bytes,
+        album: 'ScanFlow',
+        name: name,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Image saved to Gallery ✓'),
+          ),
+        );
+      }
+    } on GalException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.type.message)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save image: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _processing = false);
+    }
   }
 
   Future<void> _saveAsPdf() async {
@@ -1077,6 +1136,19 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
                                         ),
                                       ),
                                     ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: FilledButton.icon(
+                                      onPressed: _saveToGallery,
+                                      icon: const Icon(
+                                        Icons.photo_library_outlined,
+                                      ),
+                                      label: _responsiveButtonLabel(
+                                        'Save to Gallery',
+                                      ),
+                                    ),
                                   ),
                                   const SizedBox(height: 10),
                                   SizedBox(

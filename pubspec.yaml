@@ -37,6 +37,8 @@ dependencies:
   # Image handling
   image: ^4.2.0
   image_picker: ^1.1.2
+  # Save scanned images directly to the phone Gallery
+  gal: ^2.3.3
   camera: ^0.12.0
 
   # File selection / IO

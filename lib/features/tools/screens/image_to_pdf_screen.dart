@@ -59,7 +59,7 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
     try {
       final tools = context.read<PdfToolsService>();
       final data = context.read<AppDataController>();
-      final outName = 'Scanned_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final outName = 'Image to PDF - ${DateTime.now().millisecondsSinceEpoch}.pdf';
       final file = await tools.imagesToPdf(_images, outputName: outName);
       final pages = await tools.pageCount(file.path);
       final thumb = await tools.generateThumbnail(file.path, type: 'pdf');
