@@ -1,0 +1,395 @@
+import 'dart:typed_data';
+import 'dart:io';
+
+import 'package:flutter_tesseract_ocr/flutter_tesseract_ocr.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:printing/printing.dart';
+
+class OcrCancelledException implements Exception {
+  const OcrCancelledException();
+}
+
+class OcrCancelToken {
+  bool _cancelled = false;
+
+  bool get isCancelled => _cancelled;
+
+  void cancel() => _cancelled = true;
+}
+
+class OcrService {
+  final TextRecognizer _latin =
+      TextRecognizer(script: TextRecognitionScript.latin);
+
+  // Official Tesseract tessdata_best language models supported by ScanFlow.
+  // Models are downloaded only when the user selects a language.
+  static const _supported = <String>{
+    'afr', 'amh', 'ara', 'asm', 'aze', 'aze_cyrl', 'bel', 'ben',
+    'bod', 'bos', 'bre', 'bul', 'cat', 'ceb', 'ces', 'chi_sim',
+    'chi_tra', 'chr', 'cym', 'dan', 'deu', 'div', 'dzo', 'ell',
+    'eng', 'enm', 'epo', 'est', 'eus', 'fao', 'fas', 'fil', 'fin',
+    'fra', 'frm', 'fry', 'gla', 'gle', 'glg', 'grc', 'guj', 'hat',
+    'heb', 'hin', 'hrv', 'hun', 'hye', 'iku', 'ind', 'isl', 'ita',
+    'jav', 'jpn', 'kan', 'kat', 'kaz', 'khm', 'kir', 'kmr', 'kor',
+    'lao', 'lat', 'lav', 'lit', 'ltz', 'mal', 'mar', 'mkd', 'mlt',
+    'mon', 'mri', 'msa', 'mya', 'nep', 'nld', 'nor', 'oci', 'ori',
+    'pan', 'pol', 'por', 'pus', 'que', 'ron', 'rus', 'san', 'sin',
+    'slk', 'slv', 'spa', 'sqi', 'srp', 'srp_latn', 'swa', 'swe',
+    'syr', 'tam', 'tel', 'tgk', 'tha', 'tir', 'tur', 'uig',
+    'ukr', 'urd', 'uzb', 'uzb_cyrl', 'vie', 'yid',
+  };
+
+  Future<String> extractText(
+    String path, {
+    String language = 'auto',
+    OcrCancelToken? cancelToken,
+    void Function(int current, int total)? onProgress,
+  }) async {
+    final isPdf = p.extension(path).toLowerCase() == '.pdf';
+
+    // Auto keeps a practical fast path for the most common ScanFlow
+    // multilingual documents. Users can select any supported language
+    // explicitly from the global language selector.
+    final lang = language == 'auto'
+        ? 'eng+urd+ara'
+        : language.toLowerCase().trim();
+
+    if (!isPdf) {
+      onProgress?.call(1, 1);
+      return _extractImage(path, lang);
+    }
+
+    final pdfBytes = await File(path).readAsBytes();
+    final dir = await getTemporaryDirectory();
+    final texts = <String>[];
+
+    final total = await _pdfPageCount(pdfBytes);
+    var index = 0;
+
+    await for (final page in Printing.raster(
+      pdfBytes,
+      dpi: 300,
+    )) {
+      if (cancelToken?.isCancelled == true) {
+        throw const OcrCancelledException();
+      }
+
+      final file = File(
+        p.join(
+          dir.path,
+          'scanflow_ocr_${DateTime.now().microsecondsSinceEpoch}_$index.png',
+        ),
+      );
+
+      try {
+        await file.writeAsBytes(
+          await page.toPng(),
+          flush: true,
+        );
+
+        index++;
+
+        final text = await _extractImage(
+          file.path,
+          lang,
+        );
+
+        onProgress?.call(index, total);
+
+        if (text.trim().isNotEmpty) {
+          texts.add(
+            '--- Page $index ---\n${text.trim()}',
+          );
+        }
+      } finally {
+        if (await file.exists()) {
+          try {
+            await file.delete();
+          } catch (_) {}
+        }
+      }
+    }
+
+    if (cancelToken?.isCancelled == true) {
+      throw const OcrCancelledException();
+    }
+
+    return texts.join('\n\n').trim();
+  }
+
+  Future<int> _pdfPageCount(List<int> bytes) async {
+    var count = 0;
+
+    await for (final _ in Printing.raster(
+      Uint8List.fromList(bytes),
+      dpi: 36,
+    )) {
+      count++;
+    }
+
+    return count == 0 ? 1 : count;
+  }
+
+  Future<String> _extractImage(
+    String path,
+    String language,
+  ) async {
+    final normalized = language.toLowerCase().trim();
+
+    if (normalized == 'eng') {
+      try {
+        final result = await _latin.processImage(
+          InputImage.fromFile(File(path)),
+        );
+
+        final text = result.text.trim();
+
+        if (text.isNotEmpty) {
+          return text;
+        }
+      } catch (_) {}
+
+      return _tesseractBest(path, const ['eng']);
+    }
+
+    final requested = normalized
+        .split('+')
+        .where(_supported.contains)
+        .toSet()
+        .toList();
+
+    if (requested.isEmpty) {
+      return '';
+    }
+
+    for (final code in requested) {
+      await _ensureTessData(code);
+    }
+
+    // For mixed documents, run each language independently.
+    // This is much more reliable than one combined eng+urd+ara model pass.
+    final candidates = <String>[];
+
+    for (final code in requested) {
+      try {
+        final text = await _tesseractBest(
+          path,
+          [code],
+        );
+
+        if (text.trim().isNotEmpty) {
+          candidates.add(text.trim());
+        }
+      } catch (_) {}
+    }
+
+    // Also try the combined model as a fallback for genuinely mixed lines.
+    if (requested.length > 1) {
+      try {
+        final mixed = await _tesseractBest(
+          path,
+          requested,
+        );
+
+        if (mixed.trim().isNotEmpty) {
+          candidates.add(mixed.trim());
+        }
+      } catch (_) {}
+    }
+
+    if (candidates.isEmpty) {
+      return '';
+    }
+
+    candidates.sort(
+      (a, b) => _qualityScore(b).compareTo(
+        _qualityScore(a),
+      ),
+    );
+
+    return candidates.first.trim();
+  }
+
+  Future<String> _tesseractBest(
+    String path,
+    List<String> languages,
+  ) async {
+    final language = languages.join('+');
+    final results = <String>[];
+
+    // Multiple segmentation modes handle paragraphs, columns,
+    // sparse text and ordinary document blocks.
+    const psmModes = <String>[
+      '6',
+      '11',
+      '3',
+      '4',
+      '12',
+    ];
+
+    for (final psm in psmModes) {
+      try {
+        final text = await FlutterTesseractOcr.extractText(
+          path,
+          language: language,
+          args: {
+            'psm': psm,
+            'oem': '1',
+            'preserve_interword_spaces': '1',
+          },
+        );
+
+        final cleaned = _cleanText(text);
+
+        if (cleaned.isNotEmpty) {
+          results.add(cleaned);
+        }
+      } catch (_) {}
+    }
+
+    if (results.isEmpty) {
+      return '';
+    }
+
+    results.sort(
+      (a, b) => _qualityScore(b).compareTo(
+        _qualityScore(a),
+      ),
+    );
+
+    return results.first.trim();
+  }
+
+  String _cleanText(String text) {
+    return text
+        .replaceAll('\u0000', '')
+        .replaceAll(RegExp(r'[ \t]+\n'), '\n')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
+  }
+
+  int _qualityScore(String text) {
+    final value = text.trim();
+
+    if (value.isEmpty) {
+      return 0;
+    }
+
+    var score = value.length;
+
+    final words = value
+        .split(RegExp(r'\s+'))
+        .where((w) => w.trim().isNotEmpty)
+        .length;
+
+    score += words * 6;
+
+    final arabic = RegExp(
+      r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]',
+    ).allMatches(value).length;
+
+    final latin = RegExp(
+      r'[A-Za-z]',
+    ).allMatches(value).length;
+
+    score += arabic * 10;
+    score += latin * 2;
+
+    // Penalize obviously broken OCR consisting mostly of punctuation.
+    final useful = RegExp(
+      r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FFA-Za-z0-9]',
+    ).allMatches(value).length;
+
+    if (useful < 3) {
+      score -= 1000;
+    }
+
+    return score;
+  }
+
+  Future<void> _ensureTessData(String language) async {
+    final root = await FlutterTesseractOcr.getTessdataPath();
+
+    final file = File(
+      p.join(root, '$language.traineddata'),
+    );
+
+    // tessdata_best is intentionally used for higher recognition quality.
+    // Reject suspiciously small/incomplete files.
+    // Different languages have different model sizes. The exact size
+    // is not used as a language-specific rule; it only protects against
+    // incomplete/truncated downloads.
+    const minimumSize = 100000;
+
+    if (await file.exists() && await file.length() >= minimumSize) {
+      return;
+    }
+
+    final client = HttpClient();
+
+    try {
+      final url = Uri.parse(
+        'https://raw.githubusercontent.com/'
+        'tesseract-ocr/tessdata_best/main/$language.traineddata',
+      );
+
+      final request = await client.getUrl(url);
+      request.headers.set(
+        HttpHeaders.acceptEncodingHeader,
+        'identity',
+      );
+
+      final response = await request.close();
+
+      if (response.statusCode != HttpStatus.ok) {
+        throw Exception(
+          'Could not download OCR language data ($language): '
+          'HTTP ${response.statusCode}',
+        );
+      }
+
+      final bytes = <int>[];
+
+      await for (final chunk in response) {
+        bytes.addAll(chunk);
+      }
+
+      if (bytes.length < minimumSize) {
+        throw Exception(
+          'OCR language data for $language is incomplete '
+          '(${bytes.length} bytes).',
+        );
+      }
+
+      final tempFile = File(
+        '${file.path}.download',
+      );
+
+      try {
+        await tempFile.writeAsBytes(
+          bytes,
+          flush: true,
+        );
+
+        if (await file.exists()) {
+          await file.delete();
+        }
+
+        await tempFile.rename(file.path);
+      } catch (_) {
+        if (await tempFile.exists()) {
+          try {
+            await tempFile.delete();
+          } catch (_) {}
+        }
+        rethrow;
+      }
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<void> dispose() => _latin.close();
+}
