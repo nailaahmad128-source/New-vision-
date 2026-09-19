@@ -99,6 +99,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - assets/icons/app_icon.png
     - assets/icons/
     - assets/tessdata/
     - assets/tessdata_config.json
