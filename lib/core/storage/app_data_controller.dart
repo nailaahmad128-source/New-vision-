@@ -279,7 +279,8 @@ class AppDataController extends ChangeNotifier {
       }
     }
 
-    await storage.deletePermanently(doc.filePath);
+    // Tool results are now real Library documents.
+    // Removing tool history must NOT delete the Library file.
     notifyListeners();
   }
 
@@ -356,10 +357,12 @@ class AppDataController extends ChangeNotifier {
     required String type,
     int? pageCount,
   }) async {
-    // Tool results are deliberately kept OUTSIDE the Library.
-    // They live in the app's tool-output storage and are referenced
-    // directly by ToolHistoryEntry.
-    final finalPath = await storage.commitToolOutput(tmpFile, fileName: fileName);
+    // Every successful tool output is automatically saved into the
+    // real Library. Home > Recent Documents reads from this Library.
+    final finalPath = await storage.importIntoLibrary(
+      tmpFile,
+      preferredName: fileName,
+    );
     final size = await storage.fileSize(finalPath);
 
     final doc = DocumentItem(
@@ -374,11 +377,15 @@ class AppDataController extends ChangeNotifier {
       pageCount: pageCount,
     );
 
+    // Central automatic Recent/Library registration.
+    await addDocument(doc);
+
+    // Keep the tool-specific history as well.
     await addHistoryEntry(ToolHistoryEntry(
       id: storage.newId(),
       toolId: toolId,
       title: toolTitle,
-      resultDocumentId: null,
+      resultDocumentId: doc.id,
       resultFilePath: finalPath,
       resultFileName: fileName,
       resultSizeBytes: size,
