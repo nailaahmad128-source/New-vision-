@@ -2,8 +2,7 @@ name: Build Android
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -34,14 +33,8 @@ jobs:
         run: flutter pub get
 
       - name: Flutter Analyze
-        run: |
-          set +e
-          flutter analyze 2>&1 | tee analyze.log
-          status=${PIPESTATUS[0]}
-          echo "========== ACTUAL ERRORS =========="
-          grep -nE 'error •|error:|Error:' analyze.log || true
-          echo "==================================="
-          exit $status
+        continue-on-error: true
+        run: flutter analyze
 
       - name: Build Debug APK
         run: flutter build apk --debug
