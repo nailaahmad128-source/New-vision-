@@ -37,6 +37,11 @@ class _TextExtractionScreenState extends State<TextExtractionScreen> {
     _ocr = OcrService(
       onlineApiKey: apiKey,
     );
+
+    final saved = context.read<AppDataController>().defaultOcrLanguage;
+    _language = saved;
+
+    _extract();
   }
 
   static const _languageNames = <String, String>{
@@ -275,15 +280,7 @@ class _TextExtractionScreenState extends State<TextExtractionScreen> {
 
   TextAlign get _textAlign =>
       _isRtl ? TextAlign.right : TextAlign.left;
-
-  @override void initState() {
-    super.initState();
-    final saved = context.read<AppDataController>().defaultOcrLanguage;
-    _language = saved;
-    _extract();
-  }
-
-  Future<void> _saveSearchText() async {
+Future<void> _saveSearchText() async {
     final id = widget.documentId;
     if (id != null) await context.read<AppDataController>().updateExtractedText(id, _controller.text);
   }
