@@ -148,6 +148,73 @@ class LocalOfficeConverter implements ConversionProvider {
       final tmpDirectory = await storage.tmpDir;
       final outputPath = '${tmpDirectory.path}/$outputFileName';
 
+      // Scanned/image-only PDF fallback:
+      // PdfTextExtractor returns no lines for scanned pages, so run
+      // the real OCR pipeline before generating Office output.
+      final hasSelectableText =
+          pages.any((page) => page.lines.isNotEmpty);
+
+      if (!hasSelectableText) {
+        onPhase?.call(ConversionPhase.converting);
+
+        final ocr = OcrService();
+
+        try {
+          final text = await ocr.extractText(
+            sourcePath,
+            language: 'auto',
+          );
+
+          if (text.trim().isEmpty) {
+            throw const ConversionException(
+              'No readable text was found in this PDF. '
+              'Please use a clearer scan.',
+            );
+          }
+
+          switch (targetFormat) {
+            case ConversionFormat.docx:
+              await _writeDocxFromOcrText(
+                text,
+                outputPath,
+              );
+              break;
+
+            case ConversionFormat.xlsx:
+              await _writeXlsxFromOcrText(
+                text,
+                outputPath,
+              );
+              break;
+
+            case ConversionFormat.pptx:
+              await _writePptxFromOcrText(
+                text,
+                outputPath,
+              );
+              break;
+
+            case ConversionFormat.pdf:
+              throw const ConversionException(
+                'PDF is already the source format.',
+              );
+          }
+
+          final ocrResult = File(outputPath);
+
+          if (!await ocrResult.exists() ||
+              await ocrResult.length() == 0) {
+            throw const ConversionException(
+              'OCR conversion did not produce a valid output file.',
+            );
+          }
+
+          return ocrResult;
+        } finally {
+          await ocr.dispose();
+        }
+      }
+
       switch (targetFormat) {
         case ConversionFormat.docx:
           await _writeDocx(pages, outputPath);

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:flutter_tesseract_ocr/flutter_tesseract_ocr.dart';
+import 'package:image/image.dart' as img;
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -138,6 +139,7 @@ class OcrService {
   ) async {
     final normalized = language.toLowerCase().trim();
 
+    // English gets the fast ML Kit path first.
     if (normalized == 'eng') {
       try {
         final result = await _latin.processImage(
@@ -150,8 +152,6 @@ class OcrService {
           return text;
         }
       } catch (_) {}
-
-      return _tesseractBest(path, const ['eng']);
     }
 
     final requested = normalized
@@ -168,48 +168,143 @@ class OcrService {
       await _ensureTessData(code);
     }
 
-    // For mixed documents, run each language independently.
-    // This is much more reliable than one combined eng+urd+ara model pass.
-    final candidates = <String>[];
+    String ocrPath = path;
+    String? processedPath;
 
-    for (final code in requested) {
-      try {
-        final text = await _tesseractBest(
-          path,
-          [code],
-        );
+    try {
+      // Clean the input before Tesseract.
+      // This is especially useful for phone photos and scanned PDFs.
+      processedPath = await _preprocessForOcr(path);
 
-        if (text.trim().isNotEmpty) {
-          candidates.add(text.trim());
+      if (processedPath != null) {
+        ocrPath = processedPath;
+      }
+    } catch (_) {
+      // Never make OCR fail just because preprocessing failed.
+      ocrPath = path;
+    }
+
+    try {
+      final candidates = <String>[];
+
+      // For a single language, use two useful page layouts.
+      // This avoids the old 5-pass-per-language approach.
+      for (final code in requested) {
+        try {
+          final text = await _tesseractBest(
+            ocrPath,
+            [code],
+          );
+
+          if (text.trim().isNotEmpty) {
+            candidates.add(text.trim());
+          }
+        } catch (_) {}
+      }
+
+      // Mixed-language OCR gets one combined pass as a fallback.
+      if (requested.length > 1) {
+        try {
+          final mixed = await _tesseractBest(
+            ocrPath,
+            requested,
+          );
+
+          if (mixed.trim().isNotEmpty) {
+            candidates.add(mixed.trim());
+          }
+        } catch (_) {}
+      }
+
+      if (candidates.isEmpty) {
+        return '';
+      }
+
+      candidates.sort(
+        (a, b) => _qualityScore(b).compareTo(
+          _qualityScore(a),
+        ),
+      );
+
+      return candidates.first.trim();
+    } finally {
+      if (processedPath != null) {
+        final file = File(processedPath);
+
+        if (await file.exists()) {
+          try {
+            await file.delete();
+          } catch (_) {}
         }
-      } catch (_) {}
+      }
+    }
+  }
+
+  /// Prepare a document image for OCR.
+  ///
+  /// The goal is not to destroy the original image. A temporary
+  /// grayscale/contrast-enhanced PNG is created only for OCR.
+  Future<String?> _preprocessForOcr(String path) async {
+    final source = File(path);
+
+    if (!await source.exists()) {
+      return null;
     }
 
-    // Also try the combined model as a fallback for genuinely mixed lines.
-    if (requested.length > 1) {
-      try {
-        final mixed = await _tesseractBest(
-          path,
-          requested,
-        );
+    final bytes = await source.readAsBytes();
 
-        if (mixed.trim().isNotEmpty) {
-          candidates.add(mixed.trim());
-        }
-      } catch (_) {}
+    if (bytes.isEmpty) {
+      return null;
     }
 
-    if (candidates.isEmpty) {
-      return '';
+    final decoded = img.decodeImage(bytes);
+
+    if (decoded == null) {
+      return null;
     }
 
-    candidates.sort(
-      (a, b) => _qualityScore(b).compareTo(
-        _qualityScore(a),
+    // Respect camera/gallery EXIF orientation.
+    var image = img.bakeOrientation(decoded);
+
+    // Very large camera images waste RAM and slow Tesseract.
+    // Keep enough resolution for document OCR.
+    const maxWidth = 2600;
+
+    if (image.width > maxWidth) {
+      image = img.copyResize(
+        image,
+        width: maxWidth,
+        interpolation: img.Interpolation.cubic,
+      );
+    }
+
+    // Grayscale removes distracting colour information.
+    image = img.grayscale(image);
+
+    // Moderate contrast enhancement helps faded/grey scans
+    // without aggressively destroying Urdu/Arabic diacritics.
+    image = img.adjustColor(
+      image,
+      contrast: 1.20,
+      brightness: 1.04,
+    );
+
+    final directory = await getTemporaryDirectory();
+
+    final output = File(
+      p.join(
+        directory.path,
+        'scanflow_ocr_preprocessed_'
+            '${DateTime.now().microsecondsSinceEpoch}.png',
       ),
     );
 
-    return candidates.first.trim();
+    await output.writeAsBytes(
+      img.encodePng(image, level: 6),
+      flush: true,
+    );
+
+    return output.path;
   }
 
   Future<String> _tesseractBest(
@@ -219,15 +314,16 @@ class OcrService {
     final language = languages.join('+');
     final results = <String>[];
 
-    // Multiple segmentation modes handle paragraphs, columns,
-    // sparse text and ordinary document blocks.
-    const psmModes = <String>[
-      '6',
-      '11',
-      '3',
-      '4',
-      '12',
-    ];
+    // PSM 6 is strong for ordinary scanned document pages.
+    // PSM 11 is useful for sparse/irregular text.
+    // For mixed languages, PSM 3 is also useful as a final fallback.
+    final List<String> psmModes;
+
+    if (languages.length > 1) {
+      psmModes = const ['6', '11', '3'];
+    } else {
+      psmModes = const ['6', '11'];
+    }
 
     for (final psm in psmModes) {
       try {
@@ -312,19 +408,28 @@ class OcrService {
   Future<void> _ensureTessData(String language) async {
     final root = await FlutterTesseractOcr.getTessdataPath();
 
+    final directory = Directory(root);
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+
     final file = File(
       p.join(root, '$language.traineddata'),
     );
 
-    // tessdata_best is intentionally used for higher recognition quality.
-    // Reject suspiciously small/incomplete files.
-    // Different languages have different model sizes. The exact size
-    // is not used as a language-specific rule; it only protects against
-    // incomplete/truncated downloads.
+    // Keep a valid existing model.
     const minimumSize = 100000;
 
-    if (await file.exists() && await file.length() >= minimumSize) {
-      return;
+    if (await file.exists()) {
+      final size = await file.length();
+      if (size >= minimumSize) {
+        return;
+      }
+
+      // Remove incomplete/corrupt model.
+      try {
+        await file.delete();
+      } catch (_) {}
     }
 
     final client = HttpClient();
@@ -363,28 +468,24 @@ class OcrService {
         );
       }
 
-      final tempFile = File(
-        '${file.path}.download',
+      // IMPORTANT:
+      // Write directly to the final traineddata path.
+      // Do NOT create .download and do NOT rename it.
+      await file.writeAsBytes(
+        bytes,
+        flush: true,
       );
 
-      try {
-        await tempFile.writeAsBytes(
-          bytes,
-          flush: true,
-        );
+      final savedSize = await file.length();
 
-        if (await file.exists()) {
+      if (savedSize < minimumSize) {
+        try {
           await file.delete();
-        }
+        } catch (_) {}
 
-        await tempFile.rename(file.path);
-      } catch (_) {
-        if (await tempFile.exists()) {
-          try {
-            await tempFile.delete();
-          } catch (_) {}
-        }
-        rethrow;
+        throw Exception(
+          'OCR language data for $language could not be saved correctly.',
+        );
       }
     } finally {
       client.close(force: true);
