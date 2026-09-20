@@ -100,6 +100,8 @@ flutter {
 }
 
 dependencies {
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.21.1")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("org.opencv:opencv:4.10.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.3")

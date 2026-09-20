@@ -47,6 +47,20 @@ class SettingsScreen extends StatelessWidget {
             ),
           ]),
           const SizedBox(height: 14),
+          _Section(title: 'OCR', children: [
+            ListTile(
+              leading: const Icon(Icons.text_snippet_outlined),
+              title: const Text('Online OCR'),
+              subtitle: Text(
+                data.ocrSpaceApiKey.isEmpty
+                    ? 'Not configured — local OCR will be used'
+                    : 'OCR.space Engine 3 is enabled',
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => _showOcrApiKeyDialog(context, data),
+            ),
+          ]),
+          const SizedBox(height: 14),
           _Section(title: 'About', children: [
             const ListTile(leading: Icon(Icons.picture_as_pdf_rounded), title: Text('ScanFlow'), subtitle: Text('Professional document scanner, PDF toolkit and OCR suite')),
             FutureBuilder<PackageInfo>(
@@ -79,6 +93,68 @@ class SettingsScreen extends StatelessWidget {
     _ => 'System default',
   };
 
+
+  Future<void> _showOcrApiKeyDialog(
+    BuildContext context,
+    AppDataController data,
+  ) async {
+    final controller = TextEditingController(text: data.ocrSpaceApiKey);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Online OCR'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Add your free OCR.space API key to enable the stronger online OCR engine. '
+              'If the key is empty, ScanFlow will continue using local OCR.',
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'OCR.space API Key',
+                hintText: 'Paste your API key',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'The key is stored locally on this device.',
+              style: TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          if (data.ocrSpaceApiKey.isNotEmpty)
+            TextButton(
+              onPressed: () async {
+                await data.setOcrSpaceApiKey('');
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Remove'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              await data.setOcrSpaceApiKey(controller.text);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    controller.dispose();
+  }
 
   void _themeDialog(BuildContext context, AppDataController data) {
     showDialog(

@@ -20,6 +20,7 @@ import org.opencv.imgproc.Imgproc
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import com.hameed.pdfmastertools.app.PaddleOcrBridge
 
 /**
  * Result of a single detection pass: the best document quadrilateral found
@@ -41,9 +42,18 @@ class MainActivity : FlutterActivity() {
     // without depending on permission_handler.
     private val settingsChannel = "com.hameed.pdfmastertools/app_settings"
     private val scannerChannel = "com.hameed.pdfmastertools/scanner"
+    private lateinit var paddleOcrBridge: PaddleOcrBridge
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        paddleOcrBridge = PaddleOcrBridge(this)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            PaddleOcrBridge.CHANNEL,
+        ).setMethodCallHandler { call, result ->
+            paddleOcrBridge.handle(call, result)
+        }
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, settingsChannel)
             .setMethodCallHandler { call, result ->
                 if (call.method == "openAppSettings") {
@@ -807,4 +817,9 @@ class MainActivity : FlutterActivity() {
         val bl = points.minByOrNull { it.x - it.y }!!
         return listOf(tl, tr, br, bl)
     }
+    override fun onDestroy() {
+        paddleOcrBridge.release()
+        super.onDestroy()
+    }
+
 }

@@ -318,6 +318,16 @@ class AppDataController extends ChangeNotifier {
 
   String get defaultOcrLanguage => _prefsBox.get('default_ocr_language', defaultValue: 'auto') as String;
 
+  /// Optional free OCR.space API key.
+  /// Empty means online OCR is disabled and the local OCR fallback is used.
+  String get ocrSpaceApiKey =>
+      _prefsBox.get('ocr_space_api_key', defaultValue: '') as String;
+
+  Future<void> setOcrSpaceApiKey(String value) async {
+    await _prefsBox.put('ocr_space_api_key', value.trim());
+    notifyListeners();
+  }
+
   Future<void> setDefaultOcrLanguage(String value) async {
     const allowed = ['auto', 'eng', 'urd', 'ara', 'eng+urd', 'eng+ara'];
     await _prefsBox.put('default_ocr_language', allowed.contains(value) ? value : 'auto');

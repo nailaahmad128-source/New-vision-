@@ -19,7 +19,7 @@ class TextExtractionScreen extends StatefulWidget {
 }
 
 class _TextExtractionScreenState extends State<TextExtractionScreen> {
-  final _ocr = OcrService();
+  late final OcrService _ocr;
   final _controller = TextEditingController();
   final _tts = SpeechService();
   bool _loading = true;
@@ -28,6 +28,16 @@ class _TextExtractionScreenState extends State<TextExtractionScreen> {
   OcrCancelToken? _cancelToken;
   String? _error;
   String _language = 'auto';
+
+  @override
+  void initState() {
+    super.initState();
+
+    final apiKey = context.read<AppDataController>().ocrSpaceApiKey;
+    _ocr = OcrService(
+      onlineApiKey: apiKey,
+    );
+  }
 
   static const _languageNames = <String, String>{
     'auto': 'Auto detect',

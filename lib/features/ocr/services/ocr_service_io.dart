@@ -1,12 +1,15 @@
 import 'dart:typed_data';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
+
 import 'package:flutter_tesseract_ocr/flutter_tesseract_ocr.dart';
 import 'package:image/image.dart' as img;
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
+import 'online_ocr_service.dart';
 
 class OcrCancelledException implements Exception {
   const OcrCancelledException();
@@ -21,8 +24,39 @@ class OcrCancelToken {
 }
 
 class OcrService {
+  static const MethodChannel _paddleChannel =
+      MethodChannel('com.hameed.pdfmastertools/paddle_ocr');
+
+  static const _paddleLanguages = <String>{
+    'eng',
+    'urd',
+    'ara',
+    'fas',
+    'pus',
+    'uig',
+    'syr',
+    'kmr',
+    'snd',
+    'bal',
+  };
+
+  bool _paddleDisabled = false;
+
+  OcrService({String? onlineApiKey}) {
+    final key = onlineApiKey?.trim() ?? '';
+    if (key.isNotEmpty) {
+      _online = OnlineOcrService(apiKey: key);
+    }
+  }
+
   final TextRecognizer _latin =
       TextRecognizer(script: TextRecognitionScript.latin);
+
+  OnlineOcrService? _online;
+
+  // Once the online service fails, stop retrying it for the rest of
+  // this OCR operation. The existing local OCR remains the fallback.
+  bool _onlineDisabled = false;
 
   // Official Tesseract tessdata_best language models supported by ScanFlow.
   // Models are downloaded only when the user selects a language.
@@ -58,8 +92,35 @@ class OcrService {
         : language.toLowerCase().trim();
 
     if (!isPdf) {
+      onProgress?.call(0, 1);
+
+      if (cancelToken?.isCancelled == true) {
+        throw const OcrCancelledException();
+      }
+
+      final paddleText = await _tryPaddle(
+        path,
+        lang,
+      );
+
+      if (paddleText != null) {
+        onProgress?.call(1, 1);
+        return paddleText;
+      }
+
+      final onlineText = await _tryOnline(
+        path,
+        lang,
+      );
+
+      if (onlineText != null) {
+        onProgress?.call(1, 1);
+        return onlineText;
+      }
+
+      final localText = await _extractImage(path, lang);
       onProgress?.call(1, 1);
-      return _extractImage(path, lang);
+      return localText;
     }
 
     final pdfBytes = await File(path).readAsBytes();
@@ -92,10 +153,18 @@ class OcrService {
 
         index++;
 
-        final text = await _extractImage(
-          file.path,
-          lang,
-        );
+        String text = await _tryPaddle(
+              file.path,
+              lang,
+            ) ??
+            await _tryOnline(
+              file.path,
+              lang,
+            ) ??
+            await _extractImage(
+              file.path,
+              lang,
+            );
 
         onProgress?.call(index, total);
 
@@ -118,6 +187,95 @@ class OcrService {
     }
 
     return texts.join('\n\n').trim();
+  }
+
+  Future<String?> _tryPaddle(
+    String path,
+    String language,
+  ) async {
+    if (_paddleDisabled) {
+      return null;
+    }
+
+    final normalized = language.toLowerCase().trim();
+
+    if (normalized != 'auto') {
+      final requested = normalized
+          .split('+')
+          .where((code) => code.trim().isNotEmpty)
+          .map((code) => code.trim())
+          .toSet();
+
+      if (requested.isEmpty ||
+          !requested.every(_paddleLanguages.contains)) {
+        return null;
+      }
+    }
+
+    try {
+      final raw = await _paddleChannel.invokeMethod<dynamic>(
+        'recognizeFile',
+        <String, dynamic>{
+          'path': path,
+        },
+      );
+
+      if (raw is! Map) {
+        return null;
+      }
+
+      final text = raw['text']?.toString().trim() ?? '';
+
+      if (text.length < 2) {
+        return null;
+      }
+
+      return text;
+    } on PlatformException {
+      // Disable Paddle for the rest of this service instance after
+      // a native/model initialization failure. Existing OCR remains
+      // available as the fallback.
+      _paddleDisabled = true;
+      return null;
+    } catch (_) {
+      _paddleDisabled = true;
+      return null;
+    }
+  }
+
+  Future<String?> _tryOnline(
+    String path,
+    String language,
+  ) async {
+    final online = _online;
+
+    if (online == null || _onlineDisabled) {
+      return null;
+    }
+
+    try {
+      // OCR.space Engine 3 supports automatic language detection.
+      // Mixed selections such as eng+urd are therefore sent as auto.
+      final onlineLanguage = language.contains('+') ? 'auto' : language;
+
+      final text = await online.extractText(
+        filePath: path,
+        language: onlineLanguage,
+      );
+
+      final cleaned = text.trim();
+
+      if (cleaned.length < 2) {
+        return null;
+      }
+
+      return cleaned;
+    } catch (_) {
+      // Never let an online/API/network problem break OCR.
+      // Fall back to the existing local ML Kit/Tesseract engine.
+      _onlineDisabled = true;
+      return null;
+    }
   }
 
   Future<int> _pdfPageCount(List<int> bytes) async {
@@ -492,5 +650,8 @@ class OcrService {
     }
   }
 
-  Future<void> dispose() => _latin.close();
+  Future<void> dispose() async {
+    await _latin.close();
+    _online?.dispose();
+  }
 }
