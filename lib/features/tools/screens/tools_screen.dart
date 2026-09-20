@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/tools_catalog.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_background.dart';
+import '../../../core/widgets/banner_ad_slot.dart';
 import 'tool_router.dart';
 
 class ToolsScreen extends StatelessWidget {
@@ -23,6 +24,9 @@ class ToolsScreen extends StatelessWidget {
         _Tool('Compress PDF', Icons.compress_rounded, AppColors.toolCompress, () => openTool(context, ToolId.compress)),
         _Tool('Protect PDF', Icons.lock_rounded, AppColors.toolSecurity, () => openTool(context, ToolId.security)),
       ]),
+      const SizedBox(height: 4),
+      const BannerAdSlot(),
+      const SizedBox(height: 18),
       _Category(title: 'Image Tools', children: [
         _Tool('Image to PDF', Icons.image_rounded, AppColors.toolImageToPdf, () => openTool(context, ToolId.imageToPdf)),
         _Tool('OCR', Icons.document_scanner_rounded, AppColors.toolOcr, () => openTool(context, ToolId.ocrImageToText)),
