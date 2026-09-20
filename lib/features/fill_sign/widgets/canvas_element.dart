@@ -1,15 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// A single signature/text element placed on a PDF page.
+/// A single signature/text element positioned on top of a PDF page.
 ///
-/// Supports:
-/// - tap to select
-/// - single-finger drag to move
-/// - bottom-right handle to resize
-/// - delete button
-///
-/// While the element is being manipulated, the parent InteractiveViewer is
-/// temporarily locked so the element receives the gesture reliably.
+/// The element owns its drag/resize gesture state so parent rebuilds do not
+/// change the reference point of an active gesture.
 class CanvasElement extends StatefulWidget {
   final Widget child;
   final Offset position;
@@ -40,52 +34,65 @@ class CanvasElement extends StatefulWidget {
 }
 
 class _CanvasElementState extends State<CanvasElement> {
-  Offset? _resizeStartFocal;
-  Size? _resizeStartSize;
-
   static const double _minSize = 24.0;
   static const double _maxSize = 2000.0;
 
+  Offset? _dragStartPosition;
+  Offset _dragAccumulated = Offset.zero;
+
+  Size? _resizeStartSize;
+  Offset _resizeAccumulated = Offset.zero;
+
   void _startMove(DragStartDetails details) {
+    _dragStartPosition = widget.position;
+    _dragAccumulated = Offset.zero;
     widget.onInteractionLock(true);
   }
 
   void _updateMove(DragUpdateDetails details) {
-    // Apply only the current gesture delta. This keeps movement stable
-    // even when the parent rebuilds the element during dragging.
-    widget.onMove(widget.position + details.delta);
+    final start = _dragStartPosition;
+    if (start == null) return;
+
+    _dragAccumulated += details.delta;
+
+    widget.onMove(
+      start + _dragAccumulated,
+    );
   }
 
   void _endMove() {
+    _dragStartPosition = null;
+    _dragAccumulated = Offset.zero;
     widget.onInteractionLock(false);
   }
 
   void _startResize(DragStartDetails details) {
-    _resizeStartFocal = details.globalPosition;
     _resizeStartSize = widget.size;
+    _resizeAccumulated = Offset.zero;
     widget.onInteractionLock(true);
   }
 
   void _updateResize(DragUpdateDetails details) {
-    final startFocal = _resizeStartFocal;
-    final startSize = _resizeStartSize;
+    final start = _resizeStartSize;
+    if (start == null) return;
 
-    if (startFocal == null || startSize == null) return;
+    _resizeAccumulated += details.delta;
 
-    final dx = details.globalPosition.dx - startFocal.dx;
-    final dy = details.globalPosition.dy - startFocal.dy;
-
-    widget.onResize(
-      Size(
-        (startSize.width + dx).clamp(_minSize, _maxSize),
-        (startSize.height + dy).clamp(_minSize, _maxSize),
-      ),
+    final newSize = Size(
+      (start.width + _resizeAccumulated.dx)
+          .clamp(_minSize, _maxSize)
+          .toDouble(),
+      (start.height + _resizeAccumulated.dy)
+          .clamp(_minSize, _maxSize)
+          .toDouble(),
     );
+
+    widget.onResize(newSize);
   }
 
   void _endResize() {
-    _resizeStartFocal = null;
     _resizeStartSize = null;
+    _resizeAccumulated = Offset.zero;
     widget.onInteractionLock(false);
   }
 
@@ -118,7 +125,6 @@ class _CanvasElementState extends State<CanvasElement> {
               Positioned.fill(child: widget.child),
 
               if (widget.selected) ...[
-                // Delete button.
                 Positioned(
                   top: -14,
                   right: -14,
@@ -126,8 +132,8 @@ class _CanvasElementState extends State<CanvasElement> {
                     behavior: HitTestBehavior.opaque,
                     onTap: widget.onDelete,
                     child: Container(
-                      width: 30,
-                      height: 30,
+                      width: 28,
+                      height: 28,
                       decoration: const BoxDecoration(
                         color: Colors.redAccent,
                         shape: BoxShape.circle,
@@ -141,7 +147,6 @@ class _CanvasElementState extends State<CanvasElement> {
                   ),
                 ),
 
-                // Resize handle.
                 Positioned(
                   bottom: -14,
                   right: -14,
@@ -152,8 +157,8 @@ class _CanvasElementState extends State<CanvasElement> {
                     onPanEnd: (_) => _endResize(),
                     onPanCancel: _endResize,
                     child: Container(
-                      width: 30,
-                      height: 30,
+                      width: 28,
+                      height: 28,
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.primary,
                         shape: BoxShape.circle,
@@ -161,7 +166,7 @@ class _CanvasElementState extends State<CanvasElement> {
                       child: const Icon(
                         Icons.open_in_full_rounded,
                         color: Colors.white,
-                        size: 16,
+                        size: 15,
                       ),
                     ),
                   ),

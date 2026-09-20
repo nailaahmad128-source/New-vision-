@@ -50,6 +50,8 @@ class _FillSignScreenState extends State<FillSignScreen> {
   bool _loading = false;
   bool _working = false;
   bool _canvasInteractive = true;
+  final TransformationController _canvasController =
+      TransformationController();
   final List<_PlacedElement> _elements = [];
   String? _selectedElementId;
   int _idCounter = 0;
@@ -94,7 +96,15 @@ class _FillSignScreenState extends State<FillSignScreen> {
 
   Future<void> _addSignature() async {
     final bytes = await Navigator.push<Uint8List?>(
-      context, MaterialPageRoute(builder: (_) => const SignaturePadScreen()));
+      context,
+      MaterialPageRoute(
+        builder: (_) => SignaturePadScreen(
+          documentImageBytes: _pageImages.isNotEmpty
+              ? _pageImages[_currentPage]
+              : null,
+        ),
+      ),
+    );
     if (bytes == null || !mounted) return;
     final storage = context.read<FileStorageService>();
     final file = await storage.newTmpFile('sig_${_idCounter}.png');
@@ -200,6 +210,12 @@ class _FillSignScreenState extends State<FillSignScreen> {
     } finally {
       if (mounted) setState(() => _working = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _canvasController.dispose();
+    super.dispose();
   }
 
   @override
@@ -318,11 +334,13 @@ class _FillSignScreenState extends State<FillSignScreen> {
           _pageSizes[_currentPage] = Size(img.width.toDouble(), img.height.toDouble());
 
           return InteractiveViewer(
+            constrained: false,
+            transformationController: _canvasController,
             panEnabled: _canvasInteractive,
-            scaleEnabled: _canvasInteractive,
+            scaleEnabled: true,
             minScale: 0.5,
             maxScale: 4,
-            boundaryMargin: const EdgeInsets.all(80),
+            boundaryMargin: const EdgeInsets.all(120),
             child: Center(
               child: SizedBox(
                 width: img.width.toDouble(),
@@ -337,8 +355,42 @@ class _FillSignScreenState extends State<FillSignScreen> {
                         size: e.size,
                         selected: _selectedElementId == e.id,
                         onTap: () => setState(() => _selectedElementId = e.id),
-                        onMove: (pos) => setState(() => e.position = pos),
-                        onResize: (size) => setState(() => e.size = size),
+                        onMove: (pos) {
+                          final pageSize = _pageSizes[_currentPage];
+
+                          final maxX = (pageSize.width - e.size.width)
+                              .clamp(0.0, double.infinity)
+                              .toDouble();
+
+                          final maxY = (pageSize.height - e.size.height)
+                              .clamp(0.0, double.infinity)
+                              .toDouble();
+
+                          setState(() {
+                            e.position = Offset(
+                              pos.dx.clamp(0.0, maxX),
+                              pos.dy.clamp(0.0, maxY),
+                            );
+                          });
+                        },
+                        onResize: (size) {
+                          final pageSize = _pageSizes[_currentPage];
+
+                          final maxWidth = (pageSize.width - e.position.dx)
+                              .clamp(24.0, 2000.0)
+                              .toDouble();
+
+                          final maxHeight = (pageSize.height - e.position.dy)
+                              .clamp(24.0, 2000.0)
+                              .toDouble();
+
+                          setState(() {
+                            e.size = Size(
+                              size.width.clamp(24.0, maxWidth),
+                              size.height.clamp(24.0, maxHeight),
+                            );
+                          });
+                        },
                         onDelete: () => setState(() {
                           _elements.remove(e);
                           if (_selectedElementId == e.id) _selectedElementId = null;
