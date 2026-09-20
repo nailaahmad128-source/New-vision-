@@ -47,6 +47,11 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
   bool _detecting = false;
   int? _activeHandle;
 
+  // Starting values for the active corner drag.
+  // These remain fixed for the whole gesture.
+  Offset? _handleStartFocal;
+  Offset? _handleStartScreenPoint;
+
   double _zoom = 1.0;
   Offset _pan = Offset.zero;
   double _gestureStartZoom = 1.0;
