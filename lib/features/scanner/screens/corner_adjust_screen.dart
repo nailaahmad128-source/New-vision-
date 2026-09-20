@@ -387,19 +387,27 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
 
-        onPanStart: (_) {
+        onPanStart: (details) {
+          _handleStartFocal = details.globalPosition;
+          _handleStartScreenPoint = currentScreenPoint();
+
           setState(() {
             _activeHandle = index;
           });
         },
 
         onPanUpdate: (details) {
-          final current = currentScreenPoint();
+          final startFocal = _handleStartFocal;
+          final startPoint = _handleStartScreenPoint;
 
-          final target = Offset(
-            current.dx + details.delta.dx,
-            current.dy + details.delta.dy,
-          );
+          if (startFocal == null || startPoint == null) return;
+
+          // Calculate the corner from the ORIGINAL position plus the
+          // total finger movement. This is much more stable while the
+          // widget rebuilds during a zoomed-in drag.
+          final movement = details.globalPosition - startFocal;
+
+          final target = startPoint + movement;
 
           final next = _screenToNormalized(
             target,
@@ -413,6 +421,18 @@ class _CornerAdjustScreenState extends State<CornerAdjustScreen> {
         },
 
         onPanEnd: (_) {
+          _handleStartFocal = null;
+          _handleStartScreenPoint = null;
+
+          setState(() {
+            _activeHandle = null;
+          });
+        },
+
+        onPanCancel: () {
+          _handleStartFocal = null;
+          _handleStartScreenPoint = null;
+
           setState(() {
             _activeHandle = null;
           });
