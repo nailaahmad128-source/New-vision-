@@ -1,12 +1,15 @@
+import 'dart:typed_data';
+
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart' show canLaunchUrl, launchUrl, LaunchMode;
-import 'package:collection/collection.dart';
+import 'package:url_launcher/url_launcher.dart'
+    show canLaunchUrl, launchUrl, LaunchMode;
+
 import '../../../core/constants/tools_catalog.dart';
-import '../../../core/services/app_settings_opener.dart';
 import '../../../core/services/file_storage_service.dart';
 import '../../../core/storage/app_data_controller.dart';
 import '../../../models/tool_history_entry.dart';
@@ -14,82 +17,266 @@ import '../../tools/widgets/tool_history_list.dart';
 
 class QrScanScreen extends StatefulWidget {
   const QrScanScreen({super.key});
+
   @override
   State<QrScanScreen> createState() => _QrScanScreenState();
 }
 
-enum _PermState { checking, granted, denied, permanentlyDenied }
-
 class _QrScanScreenState extends State<QrScanScreen> {
-  // autoStart: false — we drive `start()` ourselves so we can distinguish
-  // "not granted yet" from "granted" without needing permission_handler.
-  // mobile_scanner requests android.permission.CAMERA natively (the only
-  // permission this screen needs) and reports the result through
-  // MobileScannerException(errorCode: MobileScannerErrorCode.permissionDenied).
-  final MobileScannerController _controller =
-      MobileScannerController(autoStart: false);
-  _PermState _perm = _PermState.checking;
-  bool _requestedOnce = false;
-  String? _lastValue;
+  CameraController? _camera;
+  late final BarcodeScanner _scanner;
+
+  bool _initializing = true;
+  bool _processing = false;
   bool _torchOn = false;
+  String? _error;
+  String? _lastValue;
 
   @override
   void initState() {
     super.initState();
-    _requestPermission();
+
+    _scanner = BarcodeScanner(
+      formats: const [
+        BarcodeFormat.qrCode,
+      ],
+    );
+
+    _initializeCamera();
   }
 
-  Future<void> _requestPermission() async {
+  Future<void> _initializeCamera() async {
     try {
-      await _controller.start();
-      if (!mounted) return;
-      setState(() => _perm = _PermState.granted);
-    } on MobileScannerException catch (e) {
-      if (!mounted) return;
-      if (e.errorCode == MobileScannerErrorCode.permissionDenied) {
-        // First denial: the system dialog can still be shown again, so we
-        // offer "Grant access". If the user is denied a second time,
-        // Android will no longer show the dialog (or has been permanently
-        // denied), so we send them to system settings instead.
-        setState(() {
-          _perm = _requestedOnce ? _PermState.permanentlyDenied : _PermState.denied;
-          _requestedOnce = true;
-        });
-      } else {
-        setState(() => _perm = _PermState.denied);
+      final cameras = await availableCameras();
+
+      if (cameras.isEmpty) {
+        throw Exception('No camera was found on this device.');
       }
+
+      CameraDescription selected = cameras.first;
+
+      for (final camera in cameras) {
+        if (camera.lensDirection == CameraLensDirection.back) {
+          selected = camera;
+          break;
+        }
+      }
+
+      final controller = CameraController(
+        selected,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.yuv420,
+      );
+
+      await controller.initialize();
+
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+
+      _camera = controller;
+
+      await controller.startImageStream(_processCameraImage);
+
+      setState(() {
+        _initializing = false;
+        _error = null;
+      });
+    } on CameraException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _initializing = false;
+        _error = _cameraError(e);
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _initializing = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
     }
   }
 
-  void _onDetect(BarcodeCapture capture) {
-    final code = capture.barcodes.firstOrNull?.rawValue;
-    if (code == null || code == _lastValue) return;
-    setState(() => _lastValue = code);
+  String _cameraError(CameraException e) {
+    switch (e.code) {
+      case 'CameraAccessDenied':
+      case 'CameraAccessDeniedWithoutPrompt':
+      case 'CameraAccessRestricted':
+        return 'Camera permission is required to scan QR codes.';
+      default:
+        return e.description ?? 'Could not start the camera.';
+    }
+  }
+
+  Future<void> _processCameraImage(CameraImage image) async {
+    if (_processing || !mounted || _camera == null) return;
+
+    _processing = true;
+
+    try {
+      final controller = _camera!;
+      final rotation =
+          InputImageRotationValue.fromRawValue(
+            controller.description.sensorOrientation,
+          );
+
+      if (rotation == null) return;
+
+      final bytes = _yuv420ToNv21(image);
+
+      final inputImage = InputImage.fromBytes(
+        bytes: bytes,
+        metadata: InputImageMetadata(
+          size: Size(
+            image.width.toDouble(),
+            image.height.toDouble(),
+          ),
+          rotation: rotation,
+          format: InputImageFormat.nv21,
+          bytesPerRow: image.width,
+        ),
+      );
+
+      final barcodes = await _scanner.processImage(inputImage);
+
+      for (final barcode in barcodes) {
+        final value = barcode.rawValue?.trim();
+
+        if (value != null && value.isNotEmpty) {
+          await _handleDetectedCode(value);
+          break;
+        }
+      }
+    } catch (_) {
+      // Camera frames arrive continuously. A bad individual frame
+      // should never stop the scanner.
+    } finally {
+      _processing = false;
+    }
+  }
+
+  Uint8List _yuv420ToNv21(CameraImage image) {
+    final width = image.width;
+    final height = image.height;
+
+    final yPlane = image.planes[0];
+    final uPlane = image.planes[1];
+    final vPlane = image.planes[2];
+
+    final out = Uint8List(width * height + (width * height ~/ 2));
+    var offset = 0;
+
+    for (var row = 0; row < height; row++) {
+      final rowStart = row * yPlane.bytesPerRow;
+
+      for (var col = 0; col < width; col++) {
+        out[offset++] = yPlane.bytes[rowStart + col];
+      }
+    }
+
+    final uvHeight = height ~/ 2;
+    final uvWidth = width ~/ 2;
+
+    for (var row = 0; row < uvHeight; row++) {
+      for (var col = 0; col < uvWidth; col++) {
+        final uIndex =
+            row * uPlane.bytesPerRow +
+            col * uPlane.bytesPerPixel!;
+        final vIndex =
+            row * vPlane.bytesPerRow +
+            col * vPlane.bytesPerPixel!;
+
+        out[offset++] = vPlane.bytes[vIndex];
+        out[offset++] = uPlane.bytes[uIndex];
+      }
+    }
+
+    return out;
+  }
+
+  Future<void> _handleDetectedCode(String value) async {
+    if (!mounted || value == _lastValue) return;
+
+    _lastValue = value;
     HapticFeedback.mediumImpact();
-    _logScan(code);
-    _showResultSheet(code);
+
+    try {
+      await _camera?.stopImageStream();
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    _logScan(value);
+    _showResultSheet(value);
+  }
+
+  Future<void> _restartScanning() async {
+    _lastValue = null;
+
+    final camera = _camera;
+
+    if (camera == null || !camera.value.isInitialized) {
+      return;
+    }
+
+    try {
+      if (!camera.value.isStreamingImages) {
+        await camera.startImageStream(_processCameraImage);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _toggleTorch() async {
+    final camera = _camera;
+
+    if (camera == null || !camera.value.isInitialized) return;
+
+    try {
+      _torchOn = !_torchOn;
+
+      await camera.setFlashMode(
+        _torchOn ? FlashMode.torch : FlashMode.off,
+      );
+
+      if (mounted) setState(() {});
+    } catch (_) {
+      _torchOn = false;
+      if (mounted) setState(() {});
+    }
   }
 
   void _logScan(String value) {
     final storage = context.read<FileStorageService>();
     final data = context.read<AppDataController>();
-    final title = value.length > 60 ? '${value.substring(0, 60)}…' : value;
-    data.addHistoryEntry(ToolHistoryEntry(
-      id: storage.newId(),
-      toolId: ToolId.qrScan.name,
-      title: title,
-      createdAt: DateTime.now(),
-      success: true,
-      note: value,
-    ));
+
+    final title =
+        value.length > 60 ? '${value.substring(0, 60)}…' : value;
+
+    data.addHistoryEntry(
+      ToolHistoryEntry(
+        id: storage.newId(),
+        toolId: ToolId.qrScan.name,
+        title: title,
+        createdAt: DateTime.now(),
+        success: true,
+        note: value,
+      ),
+    );
   }
 
   void _showResultSheet(String value) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(24),
+        ),
       ),
       builder: (ctx) => SafeArea(
         child: Padding(
@@ -102,11 +289,17 @@ class _QrScanScreenState extends State<QrScanScreen> {
                 children: [
                   const Icon(Icons.qr_code_rounded, size: 22),
                   const SizedBox(width: 8),
-                  Text('Scanned', style: Theme.of(ctx).textTheme.titleMedium),
+                  Text(
+                    'QR Code detected',
+                    style: Theme.of(ctx).textTheme.titleMedium,
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
-              SelectableText(value, style: Theme.of(ctx).textTheme.bodyLarge),
+              SelectableText(
+                value,
+                style: Theme.of(ctx).textTheme.bodyLarge,
+              ),
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -115,15 +308,21 @@ class _QrScanScreenState extends State<QrScanScreen> {
                       child: FilledButton.icon(
                         onPressed: () async {
                           final uri = Uri.tryParse(value);
-                          if (uri != null && await canLaunchUrl(uri)) {
-                            launchUrl(uri, mode: LaunchMode.externalApplication);
+
+                          if (uri != null &&
+                              await canLaunchUrl(uri)) {
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
                           }
                         },
                         icon: const Icon(Icons.open_in_new_rounded),
                         label: const Text('Open'),
                       ),
                     ),
-                  if (_looksLikeUrl(value)) const SizedBox(width: 10),
+                  if (_looksLikeUrl(value))
+                    const SizedBox(width: 10),
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => Share.share(value),
@@ -137,9 +336,9 @@ class _QrScanScreenState extends State<QrScanScreen> {
               SizedBox(
                 width: double.infinity,
                 child: TextButton(
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.pop(ctx);
-                    setState(() => _lastValue = null);
+                    await _restartScanning();
                   },
                   child: const Text('Scan again'),
                 ),
@@ -148,21 +347,29 @@ class _QrScanScreenState extends State<QrScanScreen> {
           ),
         ),
       ),
-    ).whenComplete(() {
-      if (mounted) setState(() => _lastValue = null);
+    ).whenComplete(() async {
+      if (mounted && _lastValue != null) {
+        await _restartScanning();
+      }
     });
   }
 
-  bool _looksLikeUrl(String v) => v.startsWith('http://') || v.startsWith('https://');
+  bool _looksLikeUrl(String value) {
+    return value.startsWith('http://') ||
+        value.startsWith('https://');
+  }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _camera?.dispose();
+    _scanner.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final camera = _camera;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -170,73 +377,170 @@ class _QrScanScreenState extends State<QrScanScreen> {
         foregroundColor: Colors.white,
         title: const Text('QR Scanner'),
         actions: [
-          if (_perm == _PermState.granted)
+          if (camera != null &&
+              camera.value.isInitialized &&
+              !_initializing)
             IconButton(
-              icon: Icon(_torchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded),
-              onPressed: () {
-                _controller.toggleTorch();
-                setState(() => _torchOn = !_torchOn);
-              },
+              icon: Icon(
+                _torchOn
+                    ? Icons.flash_on_rounded
+                    : Icons.flash_off_rounded,
+              ),
+              tooltip: 'Torch',
+              onPressed: _toggleTorch,
             ),
           IconButton(
             icon: const Icon(Icons.history_rounded),
             tooltip: 'Scan history',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => const ToolHistoryScreen(toolId: ToolId.qrScan, title: 'Scan History'),
-            )),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ToolHistoryScreen(
+                    toolId: ToolId.qrScan,
+                    title: 'Scan History',
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
-      body: switch (_perm) {
-        _PermState.checking => const Center(child: CircularProgressIndicator(color: Colors.white)),
-        _PermState.granted => MobileScanner(controller: _controller, onDetect: _onDetect),
-        _PermState.denied => _PermissionMessage(
-            title: 'Camera access needed',
-            message: 'Allow camera access to scan QR codes.',
-            buttonLabel: 'Grant access',
-            onPressed: _requestPermission,
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_initializing) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.camera_alt_rounded,
+                color: Colors.white,
+                size: 72,
+              ),
+              const SizedBox(height: 20),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _initializing = true;
+                    _error = null;
+                  });
+                  _initializeCamera();
+                },
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try again'),
+              ),
+            ],
           ),
-        _PermState.permanentlyDenied => _PermissionMessage(
-            title: 'Camera access needed',
-            message: 'Camera permission was denied. Enable it from system settings to scan QR codes.',
-            buttonLabel: 'Open settings',
-            onPressed: AppSettingsOpener.open,
+        ),
+      );
+    }
+
+    final camera = _camera;
+
+    if (camera == null || !camera.value.isInitialized) {
+      return const Center(
+        child: Text(
+          'Camera is not available.',
+          style: TextStyle(color: Colors.white),
+        ),
+      );
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        CameraPreview(camera),
+
+        IgnorePointer(
+          child: Center(
+            child: SizedBox(
+              width: 280,
+              height: 280,
+              child: CustomPaint(
+                painter: _QrFramePainter(),
+              ),
+            ),
           ),
-      },
+        ),
+
+        Positioned(
+          left: 24,
+          right: 24,
+          bottom: 34,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 18,
+              vertical: 12,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.65),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Text(
+              'Point the camera at a QR code',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _PermissionMessage extends StatelessWidget {
-  final String title;
-  final String message;
-  final String buttonLabel;
-  final VoidCallback onPressed;
-  const _PermissionMessage({
-    required this.title,
-    required this.message,
-    required this.buttonLabel,
-    required this.onPressed,
-  });
+class _QrFramePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    const corner = 38.0;
+
+    final path = Path()
+      ..moveTo(0, corner)
+      ..lineTo(0, 0)
+      ..lineTo(corner, 0)
+      ..moveTo(size.width - corner, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width, corner)
+      ..moveTo(0, size.height - corner)
+      ..lineTo(0, size.height)
+      ..lineTo(corner, size.height)
+      ..moveTo(size.width - corner, size.height)
+      ..lineTo(size.width, size.height)
+      ..lineTo(size.width, size.height - corner);
+
+    canvas.drawPath(path, paint);
+  }
 
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.camera_alt_rounded, color: Colors.white54, size: 48),
-            const SizedBox(height: 16),
-            Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            Text(message, style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
-            const SizedBox(height: 20),
-            FilledButton(onPressed: onPressed, child: Text(buttonLabel)),
-          ],
-        ),
-      ),
-    );
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
