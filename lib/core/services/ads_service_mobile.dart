@@ -11,8 +11,8 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 /// builds never accidentally serve — or need — real ads. NOTHING here
 /// hard-codes a real AdMob app ID or ad unit ID.
 class AdsService {
-  static const _testBannerAndroid = 'ca-app-pub-3940256099942544/6300978111';
-  static const _testInterstitialAndroid = 'ca-app-pub-3940256099942544/1033173712';
+  static const _testBannerAndroid = 'ca-app-pub-5092722454826299/5000399981';
+  static const _testInterstitialAndroid = 'ca-app-pub-5092722454826299/1699554425';
 
   static const String _bannerIdOverride =
       String.fromEnvironment('ADMOB_BANNER_UNIT_ID', defaultValue: '');
