@@ -310,6 +310,73 @@ class _SignaturePadScreenState extends State<SignaturePadScreen> {
 
               const SizedBox(height: 12),
 
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: const [
+                    Colors.black,
+                    Color(0xFF263238),
+                    Color(0xFF1565C0),
+                    Color(0xFF00897B),
+                    Color(0xFF2E7D32),
+                    Color(0xFF6A1B9A),
+                    Color(0xFFC62828),
+                    Color(0xFFEF6C00),
+                    Color(0xFFAD1457),
+                    Color(0xFF5D4037),
+                    Color(0xFF546E7A),
+                    Colors.grey,
+                    Colors.white,
+                  ].map((color) => _QuickColorCircle(color: color)).toList(),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 9,
+                  runSpacing: 9,
+                  children: const [
+                    Color(0xFF000000),
+                    Color(0xFFFFFFFF),
+                    Color(0xFFF44336),
+                    Color(0xFFE91E63),
+                    Color(0xFF9C27B0),
+                    Color(0xFF673AB7),
+                    Color(0xFF3F51B5),
+                    Color(0xFF2196F3),
+                    Color(0xFF03A9F4),
+                    Color(0xFF00BCD4),
+                    Color(0xFF009688),
+                    Color(0xFF4CAF50),
+                    Color(0xFF8BC34A),
+                    Color(0xFFFFEB3B),
+                    Color(0xFFFFC107),
+                    Color(0xFFFF9800),
+                    Color(0xFFFF5722),
+                    Color(0xFF795548),
+                    Color(0xFF607D8B),
+                  ].map((color) => GestureDetector(
+                    onTap: () => _changeColor(color),
+                    child: Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: color.value == 0xFFFFFFFF ? Colors.black38 : Colors.black26,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  )).toList(),
+                ),
+              ),
+              const SizedBox(height: 12),
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
@@ -339,6 +406,46 @@ class _SignaturePadScreenState extends State<SignaturePadScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _QuickColorCircle extends StatelessWidget {
+  final Color color;
+
+  const _QuickColorCircle({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.findAncestorStateOfType<_SignaturePadScreenState>();
+    final selected = state?._selectedColor.value == color.value;
+
+    return GestureDetector(
+      onTap: () => state?._changeColor(color),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: color.computeLuminance() > 0.75
+                ? Colors.black45
+                : Colors.white,
+            width: selected ? 3 : 1.5,
+          ),
+        ),
+        child: selected
+            ? Icon(
+                Icons.check_rounded,
+                size: 16,
+                color: color.computeLuminance() > 0.55
+                    ? Colors.black87
+                    : Colors.white,
+              )
+            : null,
       ),
     );
   }
@@ -384,10 +491,12 @@ class _DocumentColorPickerScreen extends StatefulWidget {
       _DocumentColorPickerScreenState();
 }
 
-class _DocumentColorPickerScreenState
-    extends State<_DocumentColorPickerScreen> {
+
+class _DocumentColorPickerScreenState extends State<_DocumentColorPickerScreen> {
   ui.Image? _image;
   ByteData? _pixels;
+  Offset? _pickPosition;
+  Color? _previewColor;
 
   @override
   void initState() {
@@ -396,133 +505,145 @@ class _DocumentColorPickerScreenState
   }
 
   Future<void> _loadImage() async {
-    final codec = await ui.instantiateImageCodec(
-      widget.imageBytes,
-    );
-
+    final codec = await ui.instantiateImageCodec(widget.imageBytes);
     final frame = await codec.getNextFrame();
     final image = frame.image;
-
-    final pixels = await image.toByteData(
-      format: ui.ImageByteFormat.rawRgba,
-    );
-
+    final pixels = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
     if (!mounted) return;
-
     setState(() {
       _image = image;
       _pixels = pixels;
     });
   }
 
-  Color? _sampleColor(
-    Offset localPosition,
-    Size boxSize,
-  ) {
-    final image = _image;
-    final pixels = _pixels;
-
+  Color? _sampleColor(Offset p, Size size) {
+    final image = _image, pixels = _pixels;
     if (image == null || pixels == null) return null;
-
-    final imageAspect = image.width / image.height;
-    final boxAspect = boxSize.width / boxSize.height;
-
-    double left;
-    double top;
-    double width;
-    double height;
-
-    if (imageAspect > boxAspect) {
-      width = boxSize.width;
-      height = width / imageAspect;
+    final ia = image.width / image.height, ba = size.width / size.height;
+    double left, top, width, height;
+    if (ia > ba) {
+      width = size.width;
+      height = width / ia;
       left = 0;
-      top = (boxSize.height - height) / 2;
+      top = (size.height - height) / 2;
     } else {
-      height = boxSize.height;
-      width = height * imageAspect;
+      height = size.height;
+      width = height * ia;
       top = 0;
-      left = (boxSize.width - width) / 2;
+      left = (size.width - width) / 2;
     }
+    if (p.dx < left || p.dx > left + width || p.dy < top || p.dy > top + height) return null;
+    final x = ((p.dx - left) / width * image.width).floor().clamp(0, image.width - 1);
+    final y = ((p.dy - top) / height * image.height).floor().clamp(0, image.height - 1);
+    final i = (y * image.width + x) * 4;
+    return Color.fromARGB(255, pixels.getUint8(i), pixels.getUint8(i + 1), pixels.getUint8(i + 2));
+  }
 
-    if (localPosition.dx < left ||
-        localPosition.dx > left + width ||
-        localPosition.dy < top ||
-        localPosition.dy > top + height) {
-      return null;
-    }
-
-    final x = ((localPosition.dx - left) / width * image.width)
-        .floor()
-        .clamp(0, image.width - 1);
-
-    final y = ((localPosition.dy - top) / height * image.height)
-        .floor()
-        .clamp(0, image.height - 1);
-
-    final index = (y * image.width + x) * 4;
-
-    return Color.fromARGB(
-      255,
-      pixels.getUint8(index),
-      pixels.getUint8(index + 1),
-      pixels.getUint8(index + 2),
-    );
+  void _updatePick(Offset p, Size size) {
+    final color = _sampleColor(p, size);
+    if (color == null) return;
+    setState(() {
+      _pickPosition = p;
+      _previewColor = color;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final image = _image;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pick color from document'),
+        actions: [
+          if (_previewColor != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: Center(
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: _previewColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
       body: image == null || _pixels == null
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
+          ? const Center(child: CircularProgressIndicator())
           : LayoutBuilder(
               builder: (context, constraints) {
                 final size = constraints.biggest;
-
                 return Stack(
                   children: [
                     Positioned.fill(
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTapUp: (details) {
-                          final color = _sampleColor(
-                            details.localPosition,
-                            size,
-                          );
-
-                          if (color != null) {
-                            Navigator.pop(context, color);
-                          }
+                        onPanStart: (d) => _updatePick(d.localPosition, size),
+                        onPanUpdate: (d) => _updatePick(d.localPosition, size),
+                        onPanEnd: (_) {
+                          final color = _previewColor;
+                          if (color != null) Navigator.pop(context, color);
                         },
-                        child: Image.memory(
-                          widget.imageBytes,
-                          fit: BoxFit.contain,
-                        ),
+                        onTapDown: (d) => _updatePick(d.localPosition, size),
+                        onTapUp: (d) {
+                          final color = _sampleColor(d.localPosition, size);
+                          if (color != null) Navigator.pop(context, color);
+                        },
+                        child: Image.memory(widget.imageBytes, fit: BoxFit.contain),
                       ),
                     ),
-
+                    if (_pickPosition != null && _previewColor != null)
+                      Positioned(
+                        left: (_pickPosition!.dx - 24).clamp(0.0, size.width - 48).toDouble(),
+                        top: (_pickPosition!.dy - 24).clamp(0.0, size.height - 48).toDouble(),
+                        child: IgnorePointer(
+                          child: Column(
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.black87, width: 2),
+                                  boxShadow: const [BoxShadow(blurRadius: 8, color: Colors.black45)],
+                                ),
+                                child: Center(
+                                  child: Container(
+                                    width: 30,
+                                    height: 30,
+                                    decoration: BoxDecoration(
+                                      color: _previewColor,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.black54),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Container(width: 2, height: 22, color: Colors.black87),
+                              Container(width: 18, height: 2, color: Colors.black87),
+                            ],
+                          ),
+                        ),
+                      ),
                     Positioned(
                       left: 16,
                       right: 16,
                       bottom: 20,
                       child: IgnorePointer(
                         child: Container(
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                           decoration: BoxDecoration(
                             color: Colors.black87,
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: const Text(
-                            'Tap anywhere on the document to pick its color.',
-                            style: TextStyle(
-                              color: Colors.white,
-                            ),
+                            'انگلی سے رنگ پر جائیں، نشان کو دیکھیں، پھر انگلی اٹھائیں۔',
+                            style: TextStyle(color: Colors.white),
                             textAlign: TextAlign.center,
                           ),
                         ),

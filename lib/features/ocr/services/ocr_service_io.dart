@@ -98,16 +98,6 @@ class OcrService {
         throw const OcrCancelledException();
       }
 
-      final paddleText = await _tryPaddle(
-        path,
-        lang,
-      );
-
-      if (paddleText != null) {
-        onProgress?.call(1, 1);
-        return paddleText;
-      }
-
       final onlineText = await _tryOnline(
         path,
         lang,
@@ -116,6 +106,16 @@ class OcrService {
       if (onlineText != null) {
         onProgress?.call(1, 1);
         return onlineText;
+      }
+
+      final paddleText = await _tryPaddle(
+        path,
+        lang,
+      );
+
+      if (paddleText != null) {
+        onProgress?.call(1, 1);
+        return paddleText;
       }
 
       final localText = await _extractImage(path, lang);
@@ -153,11 +153,11 @@ class OcrService {
 
         index++;
 
-        String text = await _tryPaddle(
-              file.path,
-              lang,
-            ) ??
-            await _tryOnline(
+        String text = await _tryOnline(
+          file.path,
+          lang,
+        ) ??
+            await _tryPaddle(
               file.path,
               lang,
             ) ??
