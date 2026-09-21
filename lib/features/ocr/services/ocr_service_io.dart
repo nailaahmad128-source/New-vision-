@@ -42,8 +42,14 @@ class OcrService {
 
   bool _paddleDisabled = false;
 
+  static const String _builtInOnlineOcrApiKey = 'K88301512788957';
+
   OcrService({String? onlineApiKey}) {
-    final key = onlineApiKey?.trim() ?? '';
+    final suppliedKey = onlineApiKey?.trim() ?? '';
+    final key = suppliedKey.isNotEmpty
+        ? suppliedKey
+        : _builtInOnlineOcrApiKey;
+
     if (key.isNotEmpty) {
       _online = OnlineOcrService(apiKey: key);
     }
