@@ -18,7 +18,6 @@ enum ToolId {
   qrGenerate,
   translate,
   textToSpeech,
-  ocrImageToText,
   extractText,
   extractPages,
   deletePages,
@@ -156,13 +155,6 @@ class ToolsCatalog {
       subtitle: 'Listen to any text read aloud',
       icon: Icons.record_voice_over_rounded,
       color: AppColors.toolTts,
-    ),
-    ToolDef(
-      id: ToolId.ocrImageToText,
-      title: 'Image to Text',
-      subtitle: 'OCR any photo or PDF into editable text',
-      icon: Icons.document_scanner_outlined,
-      color: AppColors.toolOcr,
     ),
     ToolDef(
       id: ToolId.pdfToWord,

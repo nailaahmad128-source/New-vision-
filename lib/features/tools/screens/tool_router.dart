@@ -6,7 +6,6 @@ import 'compress_screen.dart';
 import 'image_to_pdf_screen.dart';
 import 'pdf_to_image_screen.dart';
 import 'pdf_to_long_image_screen.dart';
-import 'pdf_extract_text_screen.dart';
 import 'page_selection_tool_screen.dart';
 import 'reorder_screen.dart';
 import 'rotate_screen.dart';
@@ -40,8 +39,7 @@ void openTool(BuildContext context, ToolId id) {
     ToolId.qrGenerate => const QrGenerateScreen(),
     ToolId.translate => const TranslationScreen(initialText: ''),
     ToolId.textToSpeech => const TextToSpeechScreen(),
-    ToolId.ocrImageToText => const OcrPickerScreen(),
-    ToolId.extractText => const PdfExtractTextScreen(),
+    ToolId.extractText => const OcrPickerScreen(),
     ToolId.extractPages => const PageSelectionToolScreen(
         mode: PageSelectionMode.extract,
     ),

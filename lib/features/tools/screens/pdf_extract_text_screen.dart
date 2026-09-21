@@ -16,7 +16,9 @@ import '../../ocr/services/hybrid_pdf_extraction_service.dart';
 import '../../ocr/services/ocr_service.dart';
 
 class PdfExtractTextScreen extends StatefulWidget {
-  const PdfExtractTextScreen({super.key});
+  final String? initialPath;
+
+  const PdfExtractTextScreen({super.key, this.initialPath});
 
   @override
   State<PdfExtractTextScreen> createState() => _PdfExtractTextScreenState();
@@ -117,6 +119,7 @@ class _PdfExtractTextScreenState extends State<PdfExtractTextScreen> {
 
       setState(() {
         _text = result;
+        _textController.text = result;
       });
     } catch (e) {
       if (!mounted) return;
@@ -188,7 +191,10 @@ class _PdfExtractTextScreenState extends State<PdfExtractTextScreen> {
   @override
   void initState() {
     super.initState();
-    _textController = TextEditingController();
+    _textController = TextEditingController(text: widget.initialPath == null ? '' : '');
+    if (widget.initialPath != null) {
+      _path = widget.initialPath;
+    }
   }
 
   @override

@@ -29,7 +29,6 @@ class ToolsScreen extends StatelessWidget {
       const SizedBox(height: 18),
       _Category(title: 'Image Tools', children: [
         _Tool('Image to PDF', Icons.image_rounded, AppColors.toolImageToPdf, () => openTool(context, ToolId.imageToPdf)),
-        _Tool('OCR', Icons.document_scanner_rounded, AppColors.toolOcr, () => openTool(context, ToolId.ocrImageToText)),
       ]),
       _Category(title: 'Edit & Sign', children: [
         _Tool('Sign', Icons.draw_rounded, AppColors.toolSign, () => openTool(context, ToolId.fillSign)),
