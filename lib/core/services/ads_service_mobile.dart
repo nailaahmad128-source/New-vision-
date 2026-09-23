@@ -63,8 +63,17 @@ class AdsService {
       adUnitId: interstitialUnitId,
       request: const AdRequest(),
       adLoadCallback: InterstitialAdLoadCallback(
-        onAdLoaded: (ad) => _interstitial = ad,
-        onAdFailedToLoad: (_) => _interstitial = null,
+        onAdLoaded: (ad) {
+          debugPrint('AdsService: INTERSTITIAL LOADED successfully');
+          _interstitial = ad;
+        },
+        onAdFailedToLoad: (error) {
+          debugPrint(
+            'AdsService: INTERSTITIAL LOAD FAILED: '
+            '${error.code} | ${error.message} | ${error.domain}',
+          );
+          _interstitial = null;
+        },
       ),
     );
   }

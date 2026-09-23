@@ -1,7 +1,7 @@
 name: pdf_master_tools
 description: "PDF Master Tools - Professional PDF toolkit"
 publish_to: 'none'
-version: 1.0.8+12
+version: 1.0.9+13
 
 environment:
   sdk: '>=3.10.0 <4.0.0'
