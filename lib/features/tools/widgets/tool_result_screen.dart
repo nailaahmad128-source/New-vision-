@@ -309,7 +309,21 @@ class _ToolResultScreenState extends State<ToolResultScreen> {
                             ),
                           ],
                         ),
-                        onTap: () => OpenFilex.open(doc.filePath),
+                        onTap: () async {
+                          final result = await OpenFilex.open(
+                            doc.filePath,
+                            type: switch (doc.type) {
+                              'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                              'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                              'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                              'image' => 'image/*',
+                              _ => 'application/pdf',
+                            },
+                          );
+                          debugPrint(
+                            'OpenFilex: ${doc.filePath} => ${result.type}: ${result.message}',
+                          );
+                        },
                       ),
                     );
                   },
