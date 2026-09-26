@@ -774,10 +774,30 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
 
   Uint8List _renderPageBytes(int index) {
     final edit = _pageEdits[index];
-    final decoded = img.decodeImage(edit.original);
+    var decoded = img.decodeImage(edit.original);
 
     if (decoded == null) {
       return Uint8List.fromList(edit.original);
+    }
+
+    // Keep the original scan resolution untouched, but use a smaller
+    // working image for filters/brightness/contrast to reduce RAM usage
+    // on lower-memory devices.
+    const maxEditDimension = 2200;
+
+    if (decoded.width > maxEditDimension ||
+        decoded.height > maxEditDimension) {
+      if (decoded.width >= decoded.height) {
+        decoded = img.copyResize(
+          decoded,
+          width: maxEditDimension,
+        );
+      } else {
+        decoded = img.copyResize(
+          decoded,
+          height: maxEditDimension,
+        );
+      }
     }
 
     switch (edit.filter) {
