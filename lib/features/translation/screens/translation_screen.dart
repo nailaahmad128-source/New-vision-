@@ -44,12 +44,19 @@ class _TranslationScreenState extends State<TranslationScreen> {
       _output.text = await _service.translate(text: text, source: _source, target: _target);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Translation ready.')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
-        e is UnsupportedError
+      debugPrint('Translation error: $e');
+      if (mounted) {
+        final message = e is UnsupportedError
             ? 'On-device translation is currently available on Android/iOS.'
-            : 'Translation failed. Download the required language models and try again.',
-      )));
-    } finally { if (mounted) setState(() => _busy = false); }
+            : 'Translation failed. Please check your internet connection and try again.';
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _speak(String text, TranslateLanguage language) async {

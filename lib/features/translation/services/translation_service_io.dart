@@ -35,8 +35,21 @@ class TranslationService {
     if (source == target) return text;
     final s = _ml(source), t = _ml(target);
     final manager = ml.OnDeviceTranslatorModelManager();
-    await manager.downloadModel(s.bcpCode); await manager.downloadModel(t.bcpCode);
-    final translator = ml.OnDeviceTranslator(sourceLanguage: s, targetLanguage: t);
+
+    final sourceReady = await manager.isModelDownloaded(s.bcpCode);
+    if (!sourceReady) {
+      await manager.downloadModel(s.bcpCode, isWifiRequired: false);
+    }
+
+    final targetReady = await manager.isModelDownloaded(t.bcpCode);
+    if (!targetReady) {
+      await manager.downloadModel(t.bcpCode, isWifiRequired: false);
+    }
+
+    final translator = ml.OnDeviceTranslator(
+      sourceLanguage: s,
+      targetLanguage: t,
+    );
     try { return await translator.translateText(text); } finally { translator.close(); }
   }
 
