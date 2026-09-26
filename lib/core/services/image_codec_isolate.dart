@@ -54,3 +54,100 @@ ImageDimensions? _decodeDimensions(Uint8List bytes) {
 Future<ImageDimensions?> decodeImageDimensionsInBackground(Uint8List bytes) {
   return compute(_decodeDimensions, bytes);
 }
+
+/// Applies scanner filters, brightness and contrast on a background isolate.
+Uint8List _applyImageEdits(Map<String, dynamic> args) {
+  final bytes = args['bytes'] as Uint8List;
+  final filter = args['filter'] as int;
+  final brightness = args['brightness'] as double;
+  final contrast = args['contrast'] as double;
+
+  var decoded = img.decodeImage(bytes);
+
+  if (decoded == null) {
+    return Uint8List.fromList(bytes);
+  }
+
+  const maxEditDimension = 2200;
+
+  if (decoded.width > maxEditDimension ||
+      decoded.height > maxEditDimension) {
+    if (decoded.width >= decoded.height) {
+      decoded = img.copyResize(
+        decoded,
+        width: maxEditDimension,
+      );
+    } else {
+      decoded = img.copyResize(
+        decoded,
+        height: maxEditDimension,
+      );
+    }
+  }
+
+  switch (filter) {
+    case 1:
+      img.grayscale(decoded);
+      break;
+    case 2:
+      img.grayscale(decoded);
+      img.adjustColor(
+        decoded,
+        contrast: 1.35,
+        brightness: 1.05,
+      );
+      break;
+    case 3:
+      img.grayscale(decoded);
+      img.adjustColor(
+        decoded,
+        contrast: 1.75,
+        brightness: 1.08,
+      );
+      img.convolution(
+        decoded,
+        filter: const [
+          0, -1, 0,
+          -1, 5, -1,
+          0, -1, 0,
+        ],
+      );
+      break;
+    case 4:
+      img.adjustColor(
+        decoded,
+        contrast: 1.22,
+        brightness: 1.04,
+        saturation: 0.92,
+      );
+      break;
+  }
+
+  img.adjustColor(
+    decoded,
+    brightness: brightness,
+    contrast: contrast,
+  );
+
+  return Uint8List.fromList(
+    img.encodeJpg(decoded, quality: 95),
+  );
+}
+
+/// Runs scanner image editing away from the UI isolate.
+Future<Uint8List> applyImageEditsInBackground({
+  required Uint8List bytes,
+  required int filter,
+  required double brightness,
+  required double contrast,
+}) {
+  return compute(
+    _applyImageEdits,
+    <String, dynamic>{
+      'bytes': bytes,
+      'filter': filter,
+      'brightness': brightness,
+      'contrast': contrast,
+    },
+  );
+}

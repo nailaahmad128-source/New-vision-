@@ -12,6 +12,7 @@ import 'package:pdf/pdf.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/services/file_storage_service.dart';
+import '../../../core/services/image_codec_isolate.dart';
 import '../../../models/document_item.dart';
 import '../../../core/storage/app_data_controller.dart';
 
@@ -772,80 +773,14 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     });
   }
 
-  Uint8List _renderPageBytes(int index) {
+  Future<Uint8List> _renderPageBytes(int index) {
     final edit = _pageEdits[index];
-    var decoded = img.decodeImage(edit.original);
 
-    if (decoded == null) {
-      return Uint8List.fromList(edit.original);
-    }
-
-    // Keep the original scan resolution untouched, but use a smaller
-    // working image for filters/brightness/contrast to reduce RAM usage
-    // on lower-memory devices.
-    const maxEditDimension = 2200;
-
-    if (decoded.width > maxEditDimension ||
-        decoded.height > maxEditDimension) {
-      if (decoded.width >= decoded.height) {
-        decoded = img.copyResize(
-          decoded,
-          width: maxEditDimension,
-        );
-      } else {
-        decoded = img.copyResize(
-          decoded,
-          height: maxEditDimension,
-        );
-      }
-    }
-
-    switch (edit.filter) {
-      case 1:
-        img.grayscale(decoded);
-        break;
-      case 2:
-        img.grayscale(decoded);
-        img.adjustColor(
-          decoded,
-          contrast: 1.35,
-          brightness: 1.05,
-        );
-        break;
-      case 3:
-        img.grayscale(decoded);
-        img.adjustColor(
-          decoded,
-          contrast: 1.75,
-          brightness: 1.08,
-        );
-        img.convolution(
-          decoded,
-          filter: const [
-            0, -1, 0,
-            -1, 5, -1,
-            0, -1, 0,
-          ],
-        );
-        break;
-      case 4:
-        img.adjustColor(
-          decoded,
-          contrast: 1.22,
-          brightness: 1.04,
-          saturation: 0.92,
-        );
-        break;
-    }
-
-    img.adjustColor(
-      decoded,
+    return applyImageEditsInBackground(
+      bytes: edit.original,
+      filter: edit.filter,
       brightness: edit.brightness,
       contrast: edit.contrast,
-    );
-
-    return Uint8List.fromList(
-      img.encodeJpg(decoded, quality: 95),
     );
   }
 
@@ -859,7 +794,7 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
 
     try {
       final bytes =
-          _renderPageBytes(_selectedPage);
+          await _renderPageBytes(_selectedPage);
 
       if (!mounted) return;
 
@@ -968,7 +903,7 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
 
     try {
       final bytes =
-          _renderPageBytes(_selectedPage);
+          await _renderPageBytes(_selectedPage);
 
       if (!mounted) return;
 
