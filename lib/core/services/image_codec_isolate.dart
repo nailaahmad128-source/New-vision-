@@ -115,6 +115,20 @@ Uint8List? _normalizeForEditing(Map<String, dynamic> args) {
   );
 }
 
+
+ImageDimensions? _decodeDimensions(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  return ImageDimensions(decoded.width, decoded.height);
+}
+
+Future<ImageDimensions?> decodeImageDimensionsInBackground(
+  Uint8List bytes,
+) {
+  return compute(_decodeDimensions, bytes);
+}
+
+
 /// Applies scanner filters, brightness and contrast on a background isolate.
 Uint8List _applyImageEdits(Map<String, dynamic> args) {
   final bytes = args['bytes'] as Uint8List;
