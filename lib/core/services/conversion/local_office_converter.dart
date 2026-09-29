@@ -418,6 +418,13 @@ class LocalOfficeConverter implements ConversionProvider {
     }
 
     await doc.save(_fs.file(outputPath));
+
+    final saved = File(outputPath);
+    final savedBytes = await saved.readAsBytes();
+    debugPrint(
+      'DOCX_DIAGNOSTIC: path=$outputPath size=${savedBytes.length} '
+      'header=${savedBytes.length >= 4 ? savedBytes.sublist(0, 4) : savedBytes}',
+    );
   }
 
   List<List<TextLine>> _groupIntoParagraphs(
