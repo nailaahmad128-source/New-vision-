@@ -109,14 +109,11 @@ class _LiveDocumentCameraScreenState
          * handled by SmartScanner so the existing Library/PDF/OCR
          * workflow is not broken.
          */
+        // Google Document Scanner can return an empty result when
+        // the user presses Back/Cancel. Close our Flutter loading
+        // screen as well, otherwise it remains black/loading forever.
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'No scanned image was returned. Please try again.',
-              ),
-            ),
-          );
+          Navigator.of(context).pop();
         }
       } finally {
         await scanner.close();
@@ -127,18 +124,26 @@ class _LiveDocumentCameraScreenState
       final message = e.toString();
 
       /*
-       * Cancellation is normal when the user closes Google's
-       * scanner. Do not show an alarming error for cancellation.
+       * Cancellation is normal when the user presses Back
+       * inside Google's native document scanner.
+       *
+       * The Flutter loading screen must also be closed, otherwise
+       * it remains visible forever as a black/loading screen.
        */
-      if (!message.toLowerCase().contains('cancel')) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Document scanner could not start: $e',
-            ),
-          ),
-        );
+      if (message.toLowerCase().contains('cancel')) {
+        Navigator.of(context).pop();
+        return;
       }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Document scanner could not start: $e',
+          ),
+        ),
+      );
+
+      Navigator.of(context).pop();
     } finally {
       _starting = false;
     }
