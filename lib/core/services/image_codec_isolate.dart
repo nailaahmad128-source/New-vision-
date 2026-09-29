@@ -113,38 +113,6 @@ Uint8List? _normalizeForEditing(Map<String, dynamic> args) {
   return Uint8List.fromList(
     img.encodeJpg(target, quality: quality),
   );
-}) {
-  return compute(
-    _decodeAndEncodeJpg,
-    _EncodeArgs(
-      bytes,
-      quality,
-      null,
-      maxDimension,
-    ),
-  );
-}
-
-/// Pixel size of a decoded image. Used by the scanner's corner-adjustment
-/// screen to map normalized (0..1) corner points onto the actual rendered
-/// image rect without guessing an aspect ratio first.
-class ImageDimensions {
-  final int width;
-  final int height;
-  const ImageDimensions(this.width, this.height);
-}
-
-ImageDimensions? _decodeDimensions(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
-  if (decoded == null) return null;
-  return ImageDimensions(decoded.width, decoded.height);
-}
-
-/// Decodes [bytes] on a background isolate and returns just its width and
-/// height, so a full-page-sized scan doesn't block the UI thread while the
-/// corner-adjustment screen figures out how to lay out its drag handles.
-Future<ImageDimensions?> decodeImageDimensionsInBackground(Uint8List bytes) {
-  return compute(_decodeDimensions, bytes);
 }
 
 /// Applies scanner filters, brightness and contrast on a background isolate.
