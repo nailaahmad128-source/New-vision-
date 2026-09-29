@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 
 import 'package:file/local.dart';
 import 'package:open_xml/open_xml.dart';
@@ -291,6 +290,13 @@ class LocalOfficeConverter implements ConversionProvider {
     return pages;
   }
 
+  String _sanitizeDocxText(String text) {
+    return text.replaceAllMapped(
+      RegExp(r'[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]'),
+      (_) => ' ',
+    );
+  }
+
   Future<void> _writeDocx(
     List<_ConvertedPage> pages,
     String outputPath,
@@ -324,7 +330,7 @@ class LocalOfficeConverter implements ConversionProvider {
             );
 
           if (words.isEmpty) {
-            final text = line.text.trim();
+            final text = _sanitizeDocxText(line.text.trim());
 
             if (text.isNotEmpty) {
               paragraph.addRun(
@@ -351,7 +357,7 @@ class LocalOfficeConverter implements ConversionProvider {
               wordIndex < words.length;
               wordIndex++) {
             final word = words[wordIndex];
-            final text = word.text.trim();
+            final text = _sanitizeDocxText(word.text.trim());
 
             if (text.isEmpty) continue;
 
@@ -420,12 +426,6 @@ class LocalOfficeConverter implements ConversionProvider {
 
     await doc.save(_fs.file(outputPath));
 
-    final saved = File(outputPath);
-    final savedBytes = await saved.readAsBytes();
-    debugPrint(
-      'DOCX_DIAGNOSTIC: path=$outputPath size=${savedBytes.length} '
-      'header=${savedBytes.length >= 4 ? savedBytes.sublist(0, 4) : savedBytes}',
-    );
   }
 
   List<List<TextLine>> _groupIntoParagraphs(
@@ -505,7 +505,7 @@ class LocalOfficeConverter implements ConversionProvider {
           ..addCell('Text');
 
         for (final line in page.lines) {
-          final text = line.text.trim();
+          final text = _sanitizeDocxText(line.text.trim());
 
           if (text.isEmpty) continue;
 
@@ -718,7 +718,7 @@ class LocalOfficeConverter implements ConversionProvider {
           }
         }
 
-        final text = word.text.trim();
+        final text = _sanitizeDocxText(word.text.trim());
 
         if (text.isEmpty) continue;
 
@@ -767,7 +767,7 @@ class LocalOfficeConverter implements ConversionProvider {
       // Recreate the PDF page as editable, independently positioned
       // PowerPoint text boxes. PDF points are converted to EMUs.
       for (final line in page.lines) {
-        final text = line.text.trim();
+        final text = _sanitizeDocxText(line.text.trim());
 
         if (text.isEmpty) continue;
 
@@ -850,7 +850,7 @@ class LocalOfficeConverter implements ConversionProvider {
 
         paragraph.addRun(
           Run(
-            text: lines[i],
+            text: _sanitizeDocxText(lines[i]),
             fontSize: 11,
           ),
         );
