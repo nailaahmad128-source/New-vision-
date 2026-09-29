@@ -11,15 +11,42 @@ class _EncodeArgs {
   final Uint8List pngBytes;
   final int quality;
   final int? resizeWidth;
-  const _EncodeArgs(this.pngBytes, this.quality, this.resizeWidth);
+  final int? maxDimension;
+
+  const _EncodeArgs(
+    this.pngBytes,
+    this.quality,
+    this.resizeWidth,
+    this.maxDimension,
+  );
 }
 
 Uint8List? _decodeAndEncodeJpg(_EncodeArgs args) {
   final decoded = img.decodeImage(args.pngBytes);
   if (decoded == null) return null;
-  final target = args.resizeWidth != null && decoded.width > args.resizeWidth!
-      ? img.copyResize(decoded, width: args.resizeWidth)
-      : decoded;
+  var target = decoded;
+
+  if (args.maxDimension != null &&
+      (target.width > args.maxDimension! ||
+          target.height > args.maxDimension!)) {
+    if (target.width >= target.height) {
+      target = img.copyResize(
+        target,
+        width: args.maxDimension!,
+      );
+    } else {
+      target = img.copyResize(
+        target,
+        height: args.maxDimension!,
+      );
+    }
+  } else if (args.resizeWidth != null &&
+      target.width > args.resizeWidth!) {
+    target = img.copyResize(
+      target,
+      width: args.resizeWidth,
+    );
+  }
   return Uint8List.fromList(img.encodeJpg(target, quality: args.quality));
 }
 
@@ -30,7 +57,72 @@ Future<Uint8List?> encodeJpgInBackground(
   int quality = 80,
   int? resizeWidth,
 }) {
-  return compute(_decodeAndEncodeJpg, _EncodeArgs(pngBytes, quality, resizeWidth));
+  return compute(
+    _decodeAndEncodeJpg,
+    _EncodeArgs(
+      pngBytes,
+      quality,
+      resizeWidth,
+      null,
+    ),
+  );
+}
+
+Future<Uint8List?> normalizeImageForEditing(
+  Uint8List bytes, {
+  int maxDimension = 2200,
+  int quality = 94,
+}) {
+  return compute(
+    _normalizeForEditing,
+    <String, dynamic>{
+      'bytes': bytes,
+      'maxDimension': maxDimension,
+      'quality': quality,
+    },
+  );
+}
+
+Uint8List? _normalizeForEditing(Map<String, dynamic> args) {
+  final bytes = args['bytes'] as Uint8List;
+  final maxDimension = args['maxDimension'] as int;
+  final quality = args['quality'] as int;
+
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return bytes;
+
+  if (decoded.width <= maxDimension &&
+      decoded.height <= maxDimension) {
+    return bytes;
+  }
+
+  var target = decoded;
+
+  if (target.width >= target.height) {
+    target = img.copyResize(
+      target,
+      width: maxDimension,
+    );
+  } else {
+    target = img.copyResize(
+      target,
+      height: maxDimension,
+    );
+  }
+
+  return Uint8List.fromList(
+    img.encodeJpg(target, quality: quality),
+  );
+}) {
+  return compute(
+    _decodeAndEncodeJpg,
+    _EncodeArgs(
+      bytes,
+      quality,
+      null,
+      maxDimension,
+    ),
+  );
 }
 
 /// Pixel size of a decoded image. Used by the scanner's corner-adjustment

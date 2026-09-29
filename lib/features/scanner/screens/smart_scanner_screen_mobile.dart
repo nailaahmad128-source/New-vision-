@@ -179,6 +179,18 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
     return original;
   }
 
+  Future<Uint8List> _preparePageBytes(Uint8List bytes) async {
+    const maxEditDimension = 2200;
+
+    final normalized = await normalizeImageForEditing(
+      bytes,
+      maxDimension: maxEditDimension,
+      quality: 94,
+    );
+
+    return normalized ?? bytes;
+  }
+
   Future<void> _setImage(XFile file, {required _ImageSource source}) async {
     setState(() {
       _image = file;
@@ -192,7 +204,9 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
 
       if (!mounted) return;
 
-      final bytes = Uint8List.fromList(processed);
+      final bytes = await _preparePageBytes(
+        Uint8List.fromList(processed),
+      );
 
       setState(() {
         if (_pages.isEmpty) {
@@ -527,8 +541,9 @@ class _SmartScannerScreenState extends State<SmartScannerScreen> {
 
           if (processed.isEmpty) continue;
 
-          final bytes =
-              Uint8List.fromList(processed);
+          final bytes = await _preparePageBytes(
+            Uint8List.fromList(processed),
+          );
 
           _pages.add(bytes);
 
