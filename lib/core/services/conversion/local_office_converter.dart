@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 import 'package:file/local.dart';
+import 'package:open_xml/open_xml.dart';
 import 'package:archive/archive.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
@@ -298,6 +300,8 @@ class LocalOfficeConverter implements ConversionProvider {
     );
   }
 
+
+
   String _xmlEscape(String text) {
     return text
         .replaceAll('&', '&amp;')
@@ -309,6 +313,13 @@ class LocalOfficeConverter implements ConversionProvider {
 
   bool _containsRtl(String text) {
     return RegExp(r'[\u0590-\u08FF]').hasMatch(text);
+  }
+
+  String _sanitizeDocxText(String text) {
+    return text.replaceAllMapped(
+      RegExp(r'[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]'),
+      (_) => ' ',
+    );
   }
 
   String _docxRun(
@@ -331,50 +342,91 @@ class LocalOfficeConverter implements ConversionProvider {
         '</w:r>';
   }
 
-  String _docxParagraph(String content, {bool rtl = false}) {
-    return '<w:p><w:pPr>${rtl ? '<w:bidi/>' : ''}</w:pPr>$content</w:p>';
+  String _docxParagraph(
+    String content, {
+    bool rtl = false,
+  }) {
+    return '<w:p>'
+        '<w:pPr>'
+        '${rtl ? '<w:bidi/>' : ''}'
+        '</w:pPr>'
+        '$content'
+        '</w:p>';
   }
 
-  Future<void> _saveStandardDocx(String outputPath, String body) async {
+  Future<void> _saveStandardDocx(
+    String outputPath,
+    String body,
+  ) async {
     final contentTypes = [
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
-      '<Default Extension="rels" ContentType="application/vnd.openxmformats-package.relationships+xml"/>',
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
       '<Default Extension="xml" ContentType="application/xml"/>',
-      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>',
       '</Types>',
-    ].join('');
+    ].join();
 
     final rels = [
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
-      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relations/officeDocument" Target="word/document.xml"/>'
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>',
       '</Relationships>',
-    ].join('');
+    ].join();
 
     final document = [
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
       '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
       '<w:body>',
       body,
-      '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>',
+      '<w:sectPr>',
+      '<w:pgSz w:w="11906" w:h="16838"/>',
+      '</w:sectPr>',
       '</w:body>',
       '</w:document>',
-    ].join('');
+    ].join();
 
     final archive = Archive();
-    archive.addFile(ArchiveFile.bytes('[Content_Types].xml', utf8.ncode(contentTypes)));
-    archive.addFile(ArchiveFile.bytes('_rels/.rels', utf8.ncode(rels)));
-    archive.addFile(ArchiveFile.bytes('word/document.xml', utf8.encode(document)));
+
+    archive.addFile(
+      ArchiveFile.bytes(
+        '[Content_Types].xml',
+        utf8.encode(contentTypes),
+      ),
+    );
+
+    archive.addFile(
+      ArchiveFile.bytes(
+        '_rels/.rels',
+        utf8.encode(rels),
+      ),
+    );
+
+    archive.addFile(
+      ArchiveFile.bytes(
+        'word/document.xml',
+        utf8.encode(document),
+      ),
+    );
 
     final zipBytes = ZipEncoder().encode(archive);
-    if (ripBytes.isEmpty) {
-      throw const ConversionException('Failed to create DOCX package.');
+
+    if (zipBytes.isEmpty) {
+      throw const ConversionException(
+        'Failed to create DOCX package.',
+      );
     }
 
-    await _fs.file(outputPath).writeAsBytes(ripBytes, flush: true);
-    debugPrint('DOCX created: $outputPath (${ripBytes.length} bytes)');
+    await _fs.file(outputPath).writeAsBytes(
+      zipBytes,
+      flush: true,
+    );
+
+    debugPrint(
+      'DOCX created: $outputPath (${zipBytes.length} bytes)',
+    );
   }
+
   Future<void> _writeDocx(
     List<_ConvertedPage> pages,
     String outputPath,
@@ -382,37 +434,56 @@ class LocalOfficeConverter implements ConversionProvider {
     final body = StringBuffer();
 
     for (var pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+      final page = pages[pageIndex];
+
       if (pageIndex > 0) {
-        body.write('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
+        body.write(
+          '<w:p><w:r><w:br w:type="page"/></w:r></w:p>',
+        );
       }
 
-      final lines = pages[pageIndex].lines
-          .map((line) => _sanitizeDocxText(line.trim()))
+      final lines = page.lines
+          .map((line) => _sanitizeDocxText(line.text.trim()))
           .where((line) => line.isNotEmpty)
           .toList();
 
       if (lines.isEmpty) {
-        body.write(_docxParagraph(
-          _docxRun('No readable text was found.', italic: true),
-        ));
+        body.write(
+          _docxParagraph(
+            _docxRun(
+              'No readable text was found.',
+              italic: true,
+            ),
+          ),
+        );
         continue;
       }
 
       for (final line in lines) {
-        body.write(_docxParagraph(
-          _docxRun(line),
-          rtl: _containsRtl(line),
-        ));
+        body.write(
+          _docxParagraph(
+            _docxRun(line),
+            rtl: _containsRtl(line),
+          ),
+        );
       }
     }
 
     if (body.isEmpty) {
-      body.write(_docxParagraph(
-        _docxRun('No readable text was found.', italic: true),
-      ));
+      body.write(
+        _docxParagraph(
+          _docxRun(
+            'No readable text was found.',
+            italic: true,
+          ),
+        ),
+      );
     }
 
-    await _saveStandardDocx(outputPath, body.toString());
+    await _saveStandardDocx(
+      outputPath,
+      body.toString(),
+    );
   }
 
   Future<void> _writeXlsx(
@@ -763,6 +834,7 @@ class LocalOfficeConverter implements ConversionProvider {
   // =========================================================
   // IMAGE OCR -> WORD
   // =========================================================
+
   Future<void> _writeDocxFromOcrText(
     String text,
     String outputPath,
@@ -770,26 +842,37 @@ class LocalOfficeConverter implements ConversionProvider {
     final body = StringBuffer();
 
     final lines = _sanitizeDocxText(text)
-        .split(RegExp(r'?
+        .split(RegExp(r'
+?
 '))
         .map((line) => line.trim())
         .where((line) => line.isNotEmpty)
         .toList();
 
     for (final line in lines) {
-      body.write(_docxParagraph(
-        _docxRun(line),
-        rtl: _containsRtl(line),
-      ));
+      body.write(
+        _docxParagraph(
+          _docxRun(line),
+          rtl: _containsRtl(line),
+        ),
+      );
     }
 
     if (body.isEmpty) {
-      body.write(_docxParagraph(
-        _docxRun('No readable text was found.', italic: true),
-      ));
+      body.write(
+        _docxParagraph(
+          _docxRun(
+            'No readable text was found.',
+            italic: true,
+          ),
+        ),
+      );
     }
 
-    await _saveStandardDocx(outputPath, body.toString());
+    await _saveStandardDocx(
+      outputPath,
+      body.toString(),
+    );
   }
 
   Future<void> _writeXlsxFromOcrText(
