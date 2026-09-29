@@ -116,6 +116,14 @@ Uint8List? _normalizeForEditing(Map<String, dynamic> args) {
 }
 
 
+
+class ImageDimensions {
+  final int width;
+  final int height;
+
+  const ImageDimensions(this.width, this.height);
+}
+
 ImageDimensions? _decodeDimensions(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
