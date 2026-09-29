@@ -315,12 +315,7 @@ class LocalOfficeConverter implements ConversionProvider {
     return RegExp(r'[\u0590-\u08FF]').hasMatch(text);
   }
 
-  String _sanitizeDocxText(String text) {
-    return text.replaceAllMapped(
-      RegExp(r'[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]'),
-      (_) => ' ',
-    );
-  }
+
 
   String _docxRun(
     String text, {
@@ -841,10 +836,11 @@ class LocalOfficeConverter implements ConversionProvider {
   ) async {
     final body = StringBuffer();
 
-    final lines = _sanitizeDocxText(text)
-        .split(RegExp(r'
-?
-'))
+    final cleanedText = _sanitizeDocxText(text)
+        .replaceAll('\r', '');
+
+    final lines = cleanedText
+        .split('\n')
         .map((line) => line.trim())
         .where((line) => line.isNotEmpty)
         .toList();
