@@ -1,7 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file/local.dart';
-import 'package:open_xml/open_xml.dart';
+import 'package:archive/archive.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 import '../../../features/ocr/services/ocr_service_io.dart';
@@ -297,174 +298,121 @@ class LocalOfficeConverter implements ConversionProvider {
     );
   }
 
+  String _xmlEscape(String text) {
+    return text
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&apos;');
+  }
+
+  bool _containsRtl(String text) {
+    return RegExp(r'[\u0590-\u08FF]').hasMatch(text);
+  }
+
+  String _docxRun(
+    String text, {
+    bool bold = false,
+    bool italic = false,
+    int fontSize = 11,
+  }) {
+    final escaped = _xmlEscape(_sanitizeDocxText(text));
+    final rtl = _containsRtl(text);
+
+    return '<w:r>'
+        '<w:rPr>'
+        '${bold ? '<w:b/>' : ''}'
+        '${italic ? '<w:i/>' : ''}'
+        '${rtl ? '<w:rtl/>' : ''}'
+        '<w:sz w:val="${fontSize * 2}"/>'
+        '</w:rPr>'
+        '<w:t xml:space="preserve">$escaped</w:t>'
+        '</w:r>';
+  }
+
+  String _docxParagraph(String content, {bool rtl = false}) {
+    return '<w:p><w:pPr>${rtl ? '<w:bidi/>' : ''}</w:pPr>$content</w:p>';
+  }
+
+  Future<void> _saveStandardDocx(String outputPath, String body) async {
+    final contentTypes = [
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+      '<Default Extension="rels" ContentType="application/vnd.openxmformats-package.relationships+xml"/>',
+      '<Default Extension="xml" ContentType="application/xml"/>',
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+      '</Types>',
+    ].join('');
+
+    final rels = [
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relations/officeDocument" Target="word/document.xml"/>'
+      '</Relationships>',
+    ].join('');
+
+    final document = [
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
+      '<w:body>',
+      body,
+      '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>',
+      '</w:body>',
+      '</w:document>',
+    ].join('');
+
+    final archive = Archive();
+    archive.addFile(ArchiveFile.bytes('[Content_Types].xml', utf8.ncode(contentTypes)));
+    archive.addFile(ArchiveFile.bytes('_rels/.rels', utf8.ncode(rels)));
+    archive.addFile(ArchiveFile.bytes('word/document.xml', utf8.encode(document)));
+
+    final zipBytes = ZipEncoder().encode(archive);
+    if (ripBytes.isEmpty) {
+      throw const ConversionException('Failed to create DOCX package.');
+    }
+
+    await _fs.file(outputPath).writeAsBytes(ripBytes, flush: true);
+    debugPrint('DOCX created: $outputPath (${ripBytes.length} bytes)');
+  }
   Future<void> _writeDocx(
     List<_ConvertedPage> pages,
     String outputPath,
   ) async {
-    final doc = await WordDocument.create(_fs);
+    final body = StringBuffer();
 
-    var wroteContent = false;
+    for (var pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+      if (pageIndex > 0) {
+        body.write('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
+      }
 
-    for (final page in pages) {
-      if (page.lines.isEmpty) {
+      final lines = pages[pageIndex].lines
+          .map((line) => _sanitizeDocxText(line.trim()))
+          .where((line) => line.isNotEmpty)
+          .toList();
+
+      if (lines.isEmpty) {
+        body.write(_docxParagraph(
+          _docxRun('No readable text was found.', italic: true),
+        ));
         continue;
       }
 
-      final paragraphs = _groupIntoParagraphs(page.lines);
-
-      for (final group in paragraphs) {
-        if (group.isEmpty) continue;
-
-        final paragraph = Paragraph();
-
-        for (var lineIndex = 0;
-            lineIndex < group.length;
-            lineIndex++) {
-          final line = group[lineIndex];
-
-          final words = [...line.wordCollection]
-            ..sort(
-              (a, b) => a.bounds.left.compareTo(
-                b.bounds.left,
-              ),
-            );
-
-          if (words.isEmpty) {
-            final text = _sanitizeDocxText(line.text.trim());
-
-            if (text.isNotEmpty) {
-              paragraph.addRun(
-                Run(
-                  text: text,
-                  bold: _isBold(line.fontStyle) ||
-                      _looksLikeHeading(
-                        text,
-                        _safeFontSize(line.fontSize),
-                        page.lines,
-                      ),
-                  italic: _isItalic(line.fontStyle),
-                  fontSize: _safeFontSize(line.fontSize),
-                ),
-              );
-
-              wroteContent = true;
-            }
-
-            continue;
-          }
-
-          for (var wordIndex = 0;
-              wordIndex < words.length;
-              wordIndex++) {
-            final word = words[wordIndex];
-            final text = _sanitizeDocxText(word.text.trim());
-
-            if (text.isEmpty) continue;
-
-            // Preserve a normal word gap. If the PDF has a visibly
-            // larger gap, preserve it with additional spaces.
-            if (wordIndex > 0) {
-              final previous = words[wordIndex - 1];
-
-              final gap =
-                  word.bounds.left -
-                  previous.bounds.right;
-
-              final previousWidth =
-                  previous.bounds.width <= 0
-                      ? 10.0
-                      : previous.bounds.width;
-
-              if (gap > previousWidth * 0.65) {
-                paragraph.addRun(
-                  Run(text: '  '),
-                );
-              } else {
-                paragraph.addRun(
-                  Run(text: ' '),
-                );
-              }
-            }
-
-            paragraph.addRun(
-              Run(
-                text: text,
-                bold: _isBold(word.fontStyle),
-                italic: _isItalic(word.fontStyle),
-                fontSize: _safeFontSize(word.fontSize),
-              ),
-            );
-
-            wroteContent = true;
-          }
-
-          // Keep separate PDF lines inside the same logical paragraph
-          // visually readable without destroying paragraph grouping.
-          if (lineIndex < group.length - 1) {
-            paragraph.addRun(
-              Run(text: ' '),
-            );
-          }
-        }
-
-        doc.addParagraph(paragraph);
+      for (final line in lines) {
+        body.write(_docxParagraph(
+          _docxRun(line),
+          rtl: _containsRtl(line),
+        ));
       }
     }
 
-    if (!wroteContent) {
-      doc.addParagraph(
-        Paragraph()
-          ..addRun(
-            Run(
-              text: 'No selectable text was found in this PDF.',
-              italic: true,
-              fontSize: 11,
-            ),
-          ),
-      );
+    if (body.isEmpty) {
+      body.write(_docxParagraph(
+        _docxRun('No readable text was found.', italic: true),
+      ));
     }
 
-    await doc.save(_fs.file(outputPath));
-
-  }
-
-  List<List<TextLine>> _groupIntoParagraphs(
-    List<TextLine> lines,
-  ) {
-    if (lines.isEmpty) return const [];
-
-    final result = <List<TextLine>>[];
-    var current = <TextLine>[lines.first];
-
-    for (var i = 1; i < lines.length; i++) {
-      final previous = lines[i - 1];
-      final next = lines[i];
-
-      final verticalGap =
-          next.bounds.top - previous.bounds.bottom;
-
-      final leftShift =
-          (next.bounds.left - previous.bounds.left).abs();
-
-      final previousHeight =
-          previous.bounds.height <= 0
-              ? 10.0
-              : previous.bounds.height;
-
-      final sameParagraph =
-          verticalGap <= previousHeight * 1.45 &&
-          leftShift <= 45;
-
-      if (sameParagraph) {
-        current.add(next);
-      } else {
-        result.add(current);
-        current = <TextLine>[next];
-      }
-    }
-
-    result.add(current);
-    return result;
+    await _saveStandardDocx(outputPath, body.toString());
   }
 
   Future<void> _writeXlsx(
@@ -819,67 +767,31 @@ class LocalOfficeConverter implements ConversionProvider {
     String text,
     String outputPath,
   ) async {
-    final doc = await WordDocument.create(_fs);
+    final body = StringBuffer();
 
-    final normalized = text
-        .replaceAll('\r\n', '\n')
-        .replaceAll('\r', '\n')
-        .trim();
-
-    final blocks = normalized
-        .split(RegExp(r'\n\s*\n+'))
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
+    final lines = _sanitizeDocxText(text)
+        .split(RegExp(r'?
+'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
         .toList();
 
-    var wrote = false;
-
-    for (final block in blocks) {
-      final paragraph = Paragraph();
-
-      final lines = block
-          .split('\n')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-
-      for (var i = 0; i < lines.length; i++) {
-        if (i > 0) {
-          paragraph.addRun(Run(text: ' '));
-        }
-
-        paragraph.addRun(
-          Run(
-            text: _sanitizeDocxText(lines[i]),
-            fontSize: 11,
-          ),
-        );
-      }
-
-      doc.addParagraph(paragraph);
-      wrote = true;
+    for (final line in lines) {
+      body.write(_docxParagraph(
+        _docxRun(line),
+        rtl: _containsRtl(line),
+      ));
     }
 
-    if (!wrote) {
-      doc.addParagraph(
-        Paragraph()
-          ..addRun(
-            Run(
-              text: 'No readable text was found.',
-              italic: true,
-              fontSize: 11,
-            ),
-          ),
-      );
+    if (body.isEmpty) {
+      body.write(_docxParagraph(
+        _docxRun('No readable text was found.', italic: true),
+      ));
     }
 
-    await doc.save(_fs.file(outputPath));
+    await _saveStandardDocx(outputPath, body.toString());
   }
 
-
-  // =========================================================
-  // IMAGE OCR -> EXCEL
-  // =========================================================
   Future<void> _writeXlsxFromOcrText(
     String text,
     String outputPath,

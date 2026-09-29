@@ -83,6 +83,7 @@ dependencies:
 
   # Local Office document generation — no API key required
   open_xml: ^0.3.1
+  archive: ^4.3.0
   file: ^7.0.1
 
   # Cloud document conversion (PDF <-> Word/Excel/PowerPoint) — provider is
