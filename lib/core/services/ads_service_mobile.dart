@@ -45,6 +45,11 @@ class AdsService {
         : _testInterstitialAndroid;
   }
 
+  String get nativeUnitId {
+    if (!Platform.isAndroid) return _nativeIdOverride;
+    return _nativeIdOverride;
+  }
+
   Future<void> init() async {
     try {
       await MobileAds.instance.initialize();
