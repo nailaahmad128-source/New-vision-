@@ -3,6 +3,7 @@ import '../../../core/constants/tools_catalog.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_background.dart';
 import '../../../core/widgets/banner_ad_slot.dart';
+import '../../../core/widgets/native_ad_tile.dart';
 import 'tool_router.dart';
 
 class ToolsScreen extends StatelessWidget {
@@ -23,6 +24,7 @@ class ToolsScreen extends StatelessWidget {
         _Tool('Reorder Pages', Icons.reorder_rounded, AppColors.toolReorder, () => openTool(context, ToolId.reorder)),
         _Tool('Compress PDF', Icons.compress_rounded, AppColors.toolCompress, () => openTool(context, ToolId.compress)),
         _Tool('Protect PDF', Icons.lock_rounded, AppColors.toolSecurity, () => openTool(context, ToolId.security)),
+        const NativeAdTile(),
       ]),
       const SizedBox(height: 4),
       const BannerAdSlot(),

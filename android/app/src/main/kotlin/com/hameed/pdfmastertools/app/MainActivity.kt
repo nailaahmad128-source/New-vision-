@@ -46,6 +46,10 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        val nativeAdFactory = NativeAdFactory(this)
+        io.flutter.plugins.googlemobileads.GoogleMobileAdsPlugin.registerNativeAdFactory(
+            flutterEngine, "gridTile", nativeAdFactory
+        )
         paddleOcrBridge = PaddleOcrBridge(this)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

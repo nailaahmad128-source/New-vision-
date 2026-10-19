@@ -18,6 +18,7 @@ class AdsService {
       String.fromEnvironment('ADMOB_BANNER_UNIT_ID', defaultValue: '');
   static const String _interstitialIdOverride =
       String.fromEnvironment('ADMOB_INTERSTITIAL_UNIT_ID', defaultValue: '');
+  static const String _nativeIdOverride = String.fromEnvironment('ADMOB_NATIVE_UNIT_ID', defaultValue: 'ca-app-pub-5092722454826299/3199124303');
 
   bool _initialized = false;
   InterstitialAd? _interstitial;
