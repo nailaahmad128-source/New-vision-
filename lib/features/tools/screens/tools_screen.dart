@@ -49,41 +49,78 @@ class _Category extends StatelessWidget {
   final String title;
   final List<Widget> children;
   const _Category({required this.title, required this.children});
+
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 24),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
-        const SizedBox(height: 10),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            // 3-column grid, but the height is driven by the tallest content
-            // (icon + up to two lines of wrapped title) rather than a fixed
-            // aspect ratio, so long tool names never overflow their card.
-            const crossAxisCount = 3;
-            const spacing = 10.0;
-            final cellWidth = (constraints.maxWidth - spacing * (crossAxisCount - 1)) / crossAxisCount;
-            final textScale = MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.3);
-            final cellHeight = 96.0 + (textScale - 1.0) * 40;
-            return GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: spacing,
-                mainAxisSpacing: spacing,
-                childAspectRatio: cellWidth / cellHeight,
-              ),
-              itemCount: children.length,
-              itemBuilder: (context, index) => children[index],
-            );
-          },
-        ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    Widget toolsGrid(List<Widget> items) => LayoutBuilder(
+      builder: (context, constraints) {
+        const crossAxisCount = 3;
+        const spacing = 10.0;
+        final cellWidth =
+            (constraints.maxWidth - spacing * (crossAxisCount - 1)) /
+                crossAxisCount;
+        final textScale =
+            MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.3);
+        final cellHeight = 96.0 + (textScale - 1.0) * 40;
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
+            childAspectRatio: cellWidth / cellHeight,
+          ),
+          itemCount: items.length,
+          itemBuilder: (context, index) => items[index],
+        );
+      },
+    );
+
+    final sections = <Widget>[];
+    var tools = <Widget>[];
+
+    void flushTools() {
+      if (tools.isNotEmpty) {
+        sections.add(toolsGrid(List<Widget>.of(tools)));
+        tools = <Widget>[];
+      }
+    }
+
+    for (final child in children) {
+      if (child is NativeAdTile) {
+        flushTools();
+        sections.add(
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: NativeAdTile(wide: true),
+          ),
+        );
+      } else {
+        tools.add(child);
+      }
+    }
+    flushTools();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 10),
+          ...sections,
+        ],
+      ),
+    );
+  }
 }
 
 class _Tool extends StatelessWidget {

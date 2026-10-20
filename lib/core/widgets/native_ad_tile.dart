@@ -17,7 +17,7 @@ class _NativeAdTileState extends State<NativeAdTile> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_ad != null || _loaded) return;
+    if (_ad != null) return;
 
     _ad = NativeAd(
       adUnitId: AdsService().nativeUnitId,
@@ -47,96 +47,22 @@ class _NativeAdTileState extends State<NativeAdTile> {
     super.dispose();
   }
 
-  Widget _fallback() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(widget.wide ? 16 : 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE0E3E7)),
-      ),
-      child: widget.wide
-          ? const Row(
-              children: [
-                Icon(Icons.document_scanner_rounded,
-                    color: Color(0xFF159B78), size: 42),
-                SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Scan smarter with ScanFlow',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF202124),
-                        ),
-                      ),
-                      SizedBox(height: 5),
-                      Text(
-                        'Scan, convert and manage your documents easily.',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF666666),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.arrow_forward_rounded,
-                    color: Color(0xFF159B78)),
-              ],
-            )
-          : const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.auto_awesome_rounded,
-                    color: Color(0xFF159B78), size: 27),
-                SizedBox(height: 6),
-                Text(
-                  'ScanFlow',
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF202124),
-                  ),
-                ),
-              ],
-            ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_ad != null && _loaded) {
-      final adCard = ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: AdWidget(ad: _ad!),
-      );
-      return SizedBox(
-        width: double.infinity,
-        height: widget.wide ? 170 : 150,
-        child: adCard,
-      );
+    if (!_loaded || _ad == null) {
+      return const SizedBox.shrink();
     }
 
-    return widget.wide
-        ? SizedBox(
-            width: double.infinity,
-            height: 150,
-            child: _fallback(),
-          )
-        : SizedBox.expand(child: _fallback());
+    return SizedBox(
+      width: double.infinity,
+      height: widget.wide ? 170 : 150,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          color: Colors.white,
+          child: AdWidget(ad: _ad!),
+        ),
+      ),
+    );
   }
 }
