@@ -11,8 +11,8 @@ import com.google.android.gms.ads.nativead.NativeAdView
 import io.flutter.plugins.googlemobileads.GoogleMobileAdsPlugin
 import io.flutter.plugins.googlemobileads.GoogleMobileAdsPlugin.NativeAdFactory
 
-class NativeAdFactory(private val context: Context) :
-    NativeAdFactory {
+class ScanFlowNativeAdFactory(private val context: Context) :
+    GoogleMobileAdsPlugin.NativeAdFactory {
 
     override fun createNativeAd(
         nativeAd: NativeAd,

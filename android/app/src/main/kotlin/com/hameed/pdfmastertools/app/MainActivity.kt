@@ -46,7 +46,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        val nativeAdFactory = com.hameed.pdfmastertools.NativeAdFactory(this)
+        val nativeAdFactory = com.hameed.pdfmastertools.ScanFlowNativeAdFactory(this)
         io.flutter.plugins.googlemobileads.GoogleMobileAdsPlugin.registerNativeAdFactory(
             flutterEngine, "gridTile", nativeAdFactory
         )
