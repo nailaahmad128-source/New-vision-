@@ -12,7 +12,7 @@ import io.flutter.plugins.googlemobileads.GoogleMobileAdsPlugin
 import io.flutter.plugins.googlemobileads.GoogleMobileAdsPlugin.NativeAdFactory
 
 class ScanFlowNativeAdFactory(private val context: Context) :
-    GoogleMobileAdsPlugin.NativeAdFactory {
+    NativeAdFactory {
 
     override fun createNativeAd(
         nativeAd: NativeAd,
