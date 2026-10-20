@@ -42,6 +42,29 @@ jobs:
           storeFile=upload-keystore.jks
           EOF
 
+      - name: Retry-safe Android NDK install
+        shell: bash
+        run: |
+          set -u
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          sdkmanager="$sdk/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$sdkmanager" ]; then
+            echo "::error::sdkmanager not found: $sdkmanager"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            echo "NDK installation attempt $attempt of 3"
+            if yes | "$sdkmanager" --install "ndk;28.2.13676358"; then
+              echo "NDK installation completed"
+              exit 0
+            fi
+            echo "::warning::NDK install failed; clearing partial download before retry"
+            rm -rf "$sdk/.downloadIntermediates" "$sdk/.temp" "$sdk/ndk/28.2.13676358"
+            sleep 5
+          done
+          echo "::error::NDK installation failed after 3 attempts"
+          exit 1
+
       - name: Flutter Doctor
         run: flutter doctor -v
 
