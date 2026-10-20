@@ -6,6 +6,7 @@ import '../../../core/storage/app_data_controller.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_background.dart';
 import '../../../core/widgets/banner_ad_slot.dart';
+import '../../../core/widgets/native_ad_tile.dart';
 import '../../tools/screens/tool_router.dart';
 import '../../library/screens/library_screen.dart';
 import '../../scanner/screens/smart_scanner_screen.dart';
@@ -50,6 +51,11 @@ class HomeScreen extends StatelessWidget {
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 18),
                   sliver: SliverToBoxAdapter(child: _QuickActions(context)),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 14)),
+                const SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: 18),
+                  sliver: SliverToBoxAdapter(child: NativeAdTile()),
                 ),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(18, 24, 18, 8),

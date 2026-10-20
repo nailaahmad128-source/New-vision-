@@ -17,9 +17,11 @@ class ToolsScreen extends StatelessWidget {
         _Tool('PDF to Word', Icons.description_rounded, AppColors.toolConvertWord, () => openTool(context, ToolId.pdfToWord)),
         _Tool('PDF to Excel', Icons.table_chart_rounded, AppColors.toolConvertExcel, () => openTool(context, ToolId.pdfToExcel)),
         _Tool('PDF to PPT', Icons.slideshow_rounded, AppColors.toolConvertPpt, () => openTool(context, ToolId.pdfToPpt)),
+        const NativeAdTile(),
         _Tool('PDF to Images', Icons.photo_library_rounded, AppColors.toolPdfToImage, () => openTool(context, ToolId.pdfToImage)),
         _Tool('Long Image', Icons.view_agenda_rounded, AppColors.toolPdfToImage, () => openTool(context, ToolId.pdfToLongImage)),
         _Tool('Merge PDF', Icons.merge_type_rounded, AppColors.toolMerge, () => openTool(context, ToolId.merge)),
+        const NativeAdTile(),
         _Tool('Extract Text', Icons.text_fields_rounded, AppColors.toolOcr, () => openTool(context, ToolId.extractText)),
         _Tool('Reorder Pages', Icons.reorder_rounded, AppColors.toolReorder, () => openTool(context, ToolId.reorder)),
         _Tool('Compress PDF', Icons.compress_rounded, AppColors.toolCompress, () => openTool(context, ToolId.compress)),
@@ -31,11 +33,13 @@ class ToolsScreen extends StatelessWidget {
       const SizedBox(height: 18),
       _Category(title: 'Image Tools', children: [
         _Tool('Image to PDF', Icons.image_rounded, AppColors.toolImageToPdf, () => openTool(context, ToolId.imageToPdf)),
+        const NativeAdTile(),
       ]),
       _Category(title: 'Edit & Sign', children: [
         _Tool('Sign', Icons.draw_rounded, AppColors.toolSign, () => openTool(context, ToolId.fillSign)),
         _Tool('Watermark', Icons.branding_watermark_rounded, AppColors.toolSecurity, () => openTool(context, ToolId.watermark)),
         _Tool('Rotate PDF', Icons.rotate_90_degrees_ccw_rounded, AppColors.toolRotate, () => openTool(context, ToolId.rotate)),
+        const NativeAdTile(),
       ]),
     ])),
   );
