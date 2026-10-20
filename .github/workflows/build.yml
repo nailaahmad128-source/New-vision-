@@ -54,7 +54,7 @@ jobs:
           fi
           for attempt in 1 2 3; do
             echo "NDK installation attempt $attempt of 3"
-            if yes | "$sdkmanager" --install "ndk;28.2.13676358"; then
+            if "$sdkmanager" --install "ndk;28.2.13676358"; then
               echo "NDK installation completed"
               exit 0
             fi
@@ -64,7 +64,6 @@ jobs:
           done
           echo "::error::NDK installation failed after 3 attempts"
           exit 1
-
       - name: Flutter Doctor
         run: flutter doctor -v
 
