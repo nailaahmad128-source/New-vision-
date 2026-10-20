@@ -1,121 +1,181 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-/// Centralizes all AdMob logic: SDK init, ad unit IDs, and interstitial
-/// frequency capping so ads never appear back-to-back or interrupt an
-/// in-progress tool action.
-///
-/// Ad unit IDs are read from --dart-define at build time (see the CI
-/// workflow / README) and fall back to Google's public test IDs so debug
-/// builds never accidentally serve — or need — real ads. NOTHING here
-/// hard-codes a real AdMob app ID or ad unit ID.
 class AdsService {
-  static const _testBannerAndroid = 'ca-app-pub-5092722454826299/5000399981';
-  static const _testInterstitialAndroid = 'ca-app-pub-5092722454826299/1699554425';
+static const appOpenUnitId = 'ca-app-pub-5092722454826299/7180384300';
 
-  static const String _bannerIdOverride =
-      String.fromEnvironment('ADMOB_BANNER_UNIT_ID', defaultValue: '');
-  static const String _interstitialIdOverride =
-      String.fromEnvironment('ADMOB_INTERSTITIAL_UNIT_ID', defaultValue: '');
-  static const String _nativeIdOverride = String.fromEnvironment('ADMOB_NATIVE_UNIT_ID', defaultValue: 'ca-app-pub-5092722454826299/3199124303');
+static const _bannerHome = 'ca-app-pub-5092722454826299/6751727636';
+static const _bannerTools = 'ca-app-pub-5092722454826299/8633241787';
+static const _bannerLibrary = 'ca-app-pub-5092722454826299/5000399981';
 
-  bool _initialized = false;
-  InterstitialAd? _interstitial;
-  DateTime? _lastInterstitialShown;
-  int _actionsSinceLastInterstitial = 0;
+static const _nativeHome = 'ca-app-pub-5092722454826299/3470958174';
+static const _nativePdf1 = 'ca-app-pub-5092722454826299/2754229146';
+static const _nativePdf2 = 'ca-app-pub-5092722454826299/9012340726';
+static const _nativePdf3 = 'ca-app-pub-5092722454826299/1882544330';
+static const _nativeImage = 'ca-app-pub-5092722454826299/8340141478';
+static const _nativeEditSign = 'ca-app-pub-5092722454826299/3199124303';
 
-  /// Minimum real-world gap between interstitials, regardless of how many
-  /// tool actions happen in between — this is the core of "non-intrusive".
-  static const _minGapBetweenInterstitials = Duration(minutes: 3);
+static const _testInterstitialAndroid =
+'ca-app-pub-5092722454826299/1699554425';
+static const String _interstitialOverride =
+String.fromEnvironment('ADMOB_INTERSTITIAL_UNIT_ID', defaultValue: '');
 
-  /// Number of completed tool actions required before another interstitial
-  /// is even considered.
-  static const _actionsRequiredBetweenInterstitials = 3;
+bool _initialized = false;
+InterstitialAd? _interstitial;
+AppOpenAd? _appOpenAd;
+bool _appOpenRequested = false;
+bool _appOpenShowing = false;
+DateTime? _lastInterstitialShown;
+int _actionsSinceLastInterstitial = 0;
 
-  String get bannerUnitId {
-    if (!Platform.isAndroid) return _testBannerAndroid;
-    return _bannerIdOverride.isNotEmpty ? _bannerIdOverride : _testBannerAndroid;
-  }
+static const _minGapBetweenInterstitials = Duration(minutes: 3);
+static const _actionsRequiredBetweenInterstitials = 3;
 
-  String get interstitialUnitId {
-    if (!Platform.isAndroid) return _testInterstitialAndroid;
-    return _interstitialIdOverride.isNotEmpty
-        ? _interstitialIdOverride
-        : _testInterstitialAndroid;
-  }
+bool get isReady => _initialized;
 
-  String get nativeUnitId {
-    if (!Platform.isAndroid) return _nativeIdOverride;
-    return _nativeIdOverride;
-  }
+String get bannerUnitId => _bannerHome;
 
-  Future<void> init() async {
-    try {
-      await MobileAds.instance.initialize();
-      _initialized = true;
-      _preloadInterstitial();
-    } catch (e) {
-      debugPrint('AdsService: init failed, continuing ad-free: $e');
-      _initialized = false;
-    }
-  }
+String bannerUnitIdFor(String placement) {
+switch (placement) {
+case 'tools':
+return _bannerTools;
+case 'library':
+return _bannerLibrary;
+default:
+return _bannerHome;
+}
+}
 
-  bool get isReady => _initialized;
+String get interstitialUnitId =>
+_interstitialOverride.isNotEmpty
+? _interstitialOverride
+: _testInterstitialAndroid;
 
-  void _preloadInterstitial() {
-    if (!_initialized) return;
-    InterstitialAd.load(
-      adUnitId: interstitialUnitId,
-      request: const AdRequest(),
-      adLoadCallback: InterstitialAdLoadCallback(
-        onAdLoaded: (ad) {
-          debugPrint('AdsService: INTERSTITIAL LOADED successfully');
-          _interstitial = ad;
-        },
-        onAdFailedToLoad: (error) {
-          debugPrint(
-            'AdsService: INTERSTITIAL LOAD FAILED: '
-            '${error.code} | ${error.message} | ${error.domain}',
-          );
-          _interstitial = null;
-        },
-      ),
-    );
-  }
+String get nativeUnitId => _nativeEditSign;
 
-  /// Call after a tool successfully completes a job. Internally decides —
-  /// based on cadence, not every single call — whether it's an appropriate
-  /// moment to show a preloaded interstitial. Never shows one while the
-  /// user is actively mid-flow (e.g. inside the signature canvas); only
-  /// call this from a "result ready" screen.
-  Future<void> maybeShowInterstitialAfterToolAction() async {
-    if (!_initialized || _interstitial == null) return;
-    _actionsSinceLastInterstitial++;
-    final now = DateTime.now();
-    final gapOk = _lastInterstitialShown == null ||
-        now.difference(_lastInterstitialShown!) > _minGapBetweenInterstitials;
-    final countOk = _actionsSinceLastInterstitial >= _actionsRequiredBetweenInterstitials;
-    if (!gapOk || !countOk) return;
+String nativeUnitIdFor(String placement) {
+switch (placement) {
+case 'home':
+return _nativeHome;
+case 'pdf1':
+return _nativePdf1;
+case 'pdf2':
+return _nativePdf2;
+case 'pdf3':
+return _nativePdf3;
+case 'image':
+return _nativeImage;
+default:
+return _nativeEditSign;
+}
+}
 
-    final ad = _interstitial!;
-    _interstitial = null;
-    _actionsSinceLastInterstitial = 0;
-    ad.fullScreenContentCallback = FullScreenContentCallback(
-      onAdDismissedFullScreenContent: (a) {
-        a.dispose();
-        _preloadInterstitial();
-      },
-      onAdFailedToShowFullScreenContent: (a, error) {
-        a.dispose();
-        _preloadInterstitial();
-      },
-    );
-    _lastInterstitialShown = now;
-    await ad.show();
-  }
+Future<void> init() async {
+try {
+await MobileAds.instance.initialize();
+_initialized = true;
+_preloadInterstitial();
+_preloadAppOpen();
+} catch (e) {
+debugPrint('AdsService init failed; continuing without ads: $e');
+_initialized = false;
+}
+}
 
-  void dispose() {
-    _interstitial?.dispose();
-  }
+void _preloadAppOpen() {
+if (!_initialized || _appOpenAd != null) return;
+AppOpenAd.load(
+adUnitId: appOpenUnitId,
+request: const AdRequest(),
+adLoadCallback: AppOpenAdLoadCallback(
+onAdLoaded: (ad) {
+_appOpenAd = ad;
+if (_appOpenRequested) _showAppOpen();
+},
+onAdFailedToLoad: (error) {
+debugPrint('App Open load failed: ${error.message}');
+_appOpenAd = null;
+},
+),
+);
+}
+
+void requestAppOpenShow() {
+if (!_initialized || _appOpenShowing) return;
+_appOpenRequested = true;
+if (_appOpenAd != null) _showAppOpen();
+}
+
+void _showAppOpen() {
+final ad = _appOpenAd;
+if (ad == null || _appOpenShowing) return;
+_appOpenAd = null;
+_appOpenRequested = false;
+_appOpenShowing = true;
+ad.fullScreenContentCallback = FullScreenContentCallback<AppOpenAd>(
+onAdDismissedFullScreenContent: (ad) {
+_appOpenShowing = false;
+ad.dispose();
+_preloadAppOpen();
+},
+onAdFailedToShowFullScreenContent: (ad, error) {
+_appOpenShowing = false;
+ad.dispose();
+_preloadAppOpen();
+},
+);
+ad.show();
+}
+
+void _preloadInterstitial() {
+if (!_initialized) return;
+InterstitialAd.load(
+adUnitId: interstitialUnitId,
+request: const AdRequest(),
+adLoadCallback: InterstitialAdLoadCallback(
+onAdLoaded: (ad) {
+_interstitial = ad;
+debugPrint('Interstitial loaded');
+},
+onAdFailedToLoad: (error) {
+_interstitial = null;
+debugPrint('Interstitial load failed: ${error.message}');
+},
+),
+);
+}
+
+Future<void> maybeShowInterstitialAfterToolAction() async {
+if (!_initialized || _interstitial == null) return;
+_actionsSinceLastInterstitial++;
+final now = DateTime.now();
+final gapOk = _lastInterstitialShown == null ||
+now.difference(_lastInterstitialShown!) > _minGapBetweenInterstitials;
+if (!gapOk ||
+_actionsSinceLastInterstitial < _actionsRequiredBetweenInterstitials) {
+return;
+}
+
+final ad = _interstitial!;
+_interstitial = null;
+_actionsSinceLastInterstitial = 0;
+_lastInterstitialShown = now;
+ad.fullScreenContentCallback = FullScreenContentCallback<InterstitialAd>(
+  onAdDismissedFullScreenContent: (ad) {
+    ad.dispose();
+    _preloadInterstitial();
+  },
+  onAdFailedToShowFullScreenContent: (ad, error) {
+    ad.dispose();
+    _preloadInterstitial();
+  },
+);
+await ad.show();
+
+}
+
+void dispose() {
+_interstitial?.dispose();
+_appOpenAd?.dispose();
+}
 }

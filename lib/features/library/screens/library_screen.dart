@@ -228,7 +228,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       },
                     ),
             ),
-            const BannerAdSlot(),
+
           ],
         ),
       ),

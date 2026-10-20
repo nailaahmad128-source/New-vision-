@@ -1,8 +1,12 @@
 class AdsService {
-  String get bannerUnitId => '';
-  String get interstitialUnitId => '';
-  Future<void> init() async {}
-  bool get isReady => false;
-  Future<void> maybeShowInterstitialAfterToolAction() async {}
-  void dispose() {}
+bool get isReady => false;
+String get bannerUnitId => '';
+String bannerUnitIdFor(String placement) => '';
+String get interstitialUnitId => '';
+String get nativeUnitId => '';
+String nativeUnitIdFor(String placement) => '';
+Future<void> init() async {}
+void requestAppOpenShow() {}
+Future<void> maybeShowInterstitialAfterToolAction() async {}
+void dispose() {}
 }

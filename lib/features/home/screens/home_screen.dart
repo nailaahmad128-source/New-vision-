@@ -55,7 +55,7 @@ class HomeScreen extends StatelessWidget {
                 const SliverToBoxAdapter(child: SizedBox(height: 14)),
                 const SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: 18),
-                  sliver: SliverToBoxAdapter(child: NativeAdTile(wide: true)),
+                  sliver: SliverToBoxAdapter(child: NativeAdTile(wide: true, placement: 'home')),
                 ),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(18, 24, 18, 8),
@@ -99,7 +99,6 @@ class HomeScreen extends StatelessWidget {
                         ),
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
-                const SliverToBoxAdapter(child: Center(child: BannerAdSlot())),
                 const SliverToBoxAdapter(child: SizedBox(height: 90)),
               ],
             ),

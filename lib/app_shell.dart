@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'core/services/ads_service.dart';
+import 'core/widgets/banner_ad_slot.dart';
 import 'features/home/screens/home_screen.dart';
 import 'features/library/screens/library_screen.dart';
 import 'features/trash/screens/trash_screen.dart';
@@ -22,6 +25,14 @@ class _AppShellState extends State<AppShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<AdsService>().requestAppOpenShow();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: AnimatedSwitcher(
@@ -39,13 +50,9 @@ class _AppShellState extends State<AppShell> {
               curve: Curves.easeOutCubic,
             ),
           );
-
           return FadeTransition(
             opacity: animation,
-            child: SlideTransition(
-              position: slide,
-              child: child,
-            ),
+            child: SlideTransition(position: slide, child: child),
           );
         },
         child: KeyedSubtree(
@@ -53,32 +60,41 @@ class _AppShellState extends State<AppShell> {
           child: _screens[_index],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) {
-          if (i == _index) return;
-          setState(() => _index = i);
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.folder_outlined),
-            selectedIcon: Icon(Icons.folder_rounded),
-            label: 'Library',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.document_scanner_outlined),
-            selectedIcon: Icon(Icons.document_scanner_rounded),
-            label: 'Scan',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.delete_outline_rounded),
-            selectedIcon: Icon(Icons.delete_rounded),
-            label: 'Deleted',
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_index == 0)
+            const BannerAdSlot(placement: 'home'),
+          if (_index == 1)
+            const BannerAdSlot(placement: 'library'),
+          NavigationBar(
+            selectedIndex: _index,
+            onDestinationSelected: (i) {
+              if (i == _index) return;
+              setState(() => _index = i);
+            },
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home_rounded),
+                label: 'Home',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.folder_outlined),
+                selectedIcon: Icon(Icons.folder_rounded),
+                label: 'Library',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.document_scanner_outlined),
+                selectedIcon: Icon(Icons.document_scanner_rounded),
+                label: 'Scan',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.delete_outline_rounded),
+                selectedIcon: Icon(Icons.delete_rounded),
+                label: 'Deleted',
+              ),
+            ],
           ),
         ],
       ),
