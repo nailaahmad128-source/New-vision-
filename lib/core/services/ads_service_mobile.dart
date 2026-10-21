@@ -55,6 +55,10 @@ String get nativeUnitId => _nativeEditSign;
 
 String nativeUnitIdFor(String placement) {
 switch (placement) {
+case 'home_popular1':
+return 'ca-app-pub-5092722454826299/6783606510';
+case 'home_popular2':
+return 'ca-app-pub-5092722454826299/3229918044';
 case 'home':
 return _nativeHome;
 case 'pdf1':

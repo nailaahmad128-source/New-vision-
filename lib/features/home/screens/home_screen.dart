@@ -63,7 +63,7 @@ class HomeScreen extends StatelessWidget {
                 ),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 18),
-                  sliver: SliverToBoxAdapter(child: _PopularTools(context)),
+                  sliver: SliverToBoxAdapter(child: _PopularToolsGrid()),
                 ),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(18, 24, 18, 8),
@@ -167,14 +167,58 @@ Widget _QuickActions(BuildContext context) => Row(children: [
   _ActionCard(icon: Icons.apps_rounded, title: 'More', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ToolsScreen()))),
 ]);
 
-Widget _PopularTools(BuildContext context) => GridView.count(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: 3, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 1.12, children: [
-  _ToolCard('PDF to Word', Icons.description_rounded, AppColors.toolConvertWord, () => openTool(context, ToolId.pdfToWord)),
-  _ToolCard('PDF to Excel', Icons.table_chart_rounded, AppColors.toolConvertExcel, () => openTool(context, ToolId.pdfToExcel)),
-  _ToolCard('Extract Text', Icons.text_fields_rounded, AppColors.toolOcr, () => openTool(context, ToolId.extractText)),
-  _ToolCard('Image to PDF', Icons.image_rounded, AppColors.toolImageToPdf, () => openTool(context, ToolId.imageToPdf)),
-  _ToolCard('QR Generator', Icons.qr_code_2_rounded, AppColors.toolQrGen, () => openTool(context, ToolId.qrGenerate)),
-  _ToolCard('PDF to Long Image', Icons.view_agenda_rounded, AppColors.toolPdfToImage, () => openTool(context, ToolId.pdfToLongImage)),
-]);
+class _PopularToolsGrid extends StatefulWidget {
+  const _PopularToolsGrid();
+
+  @override
+  State<_PopularToolsGrid> createState() => _PopularToolsGridState();
+}
+
+class _PopularToolsGridState extends State<_PopularToolsGrid> {
+  final Set<String> _failedAds = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <Widget>[
+      _ToolCard('PDF to Word', Icons.description_rounded, AppColors.toolConvertWord, () => openTool(context, ToolId.pdfToWord)),
+      _ToolCard('PDF to Excel', Icons.table_chart_rounded, AppColors.toolConvertExcel, () => openTool(context, ToolId.pdfToExcel)),
+      _ToolCard('Extract Text', Icons.text_fields_rounded, AppColors.toolOcr, () => openTool(context, ToolId.extractText)),
+      _ToolCard('Image to PDF', Icons.image_rounded, AppColors.toolImageToPdf, () => openTool(context, ToolId.imageToPdf)),
+      _ToolCard('QR Generator', Icons.qr_code_2_rounded, AppColors.toolQrGen, () => openTool(context, ToolId.qrGenerate)),
+      _ToolCard('PDF to Long Image', Icons.view_agenda_rounded, AppColors.toolPdfToImage, () => openTool(context, ToolId.pdfToLongImage)),
+      if (!_failedAds.contains('home_popular1'))
+        NativeAdTile(
+          key: const ValueKey('home_popular1'),
+          placement: 'home_popular1',
+          onVisibilityChanged: (loaded) {
+            if (!loaded && mounted && !_failedAds.contains('home_popular1')) {
+              setState(() => _failedAds.add('home_popular1'));
+            }
+          },
+        ),
+      if (!_failedAds.contains('home_popular2'))
+        NativeAdTile(
+          key: const ValueKey('home_popular2'),
+          placement: 'home_popular2',
+          onVisibilityChanged: (loaded) {
+            if (!loaded && mounted && !_failedAds.contains('home_popular2')) {
+              setState(() => _failedAds.add('home_popular2'));
+            }
+          },
+        ),
+    ];
+
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 3,
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      childAspectRatio: 1.12,
+      children: items,
+    );
+  }
+}
 
 class _ActionCard extends StatelessWidget { final IconData icon; final String title; final VoidCallback onTap; const _ActionCard({required this.icon, required this.title, required this.onTap}); @override Widget build(BuildContext context) => Expanded(child: Padding(padding: const EdgeInsets.only(right: 8), child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(18), child: Container(padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4), decoration: BoxDecoration(color: Colors.white.withValues(alpha: .92), borderRadius: BorderRadius.circular(18), border: Border.all(color: AppColors.lightBorder)), child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon, color: AppColors.brandPrimary, size: 26), const SizedBox(height: 7), Text(title, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, height: 1.15))]))))); }
 class _ToolCard extends StatelessWidget {
