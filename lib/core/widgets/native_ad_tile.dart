@@ -5,11 +5,13 @@ import '../services/ads_service.dart';
 class NativeAdTile extends StatefulWidget {
 final bool wide;
 final String placement;
+final ValueChanged<bool>? onVisibilityChanged;
 
 const NativeAdTile({
 super.key,
 this.wide = false,
 this.placement = 'home',
+this.onVisibilityChanged,
 });
 
 @override
@@ -31,7 +33,10 @@ _ad = NativeAd(
   request: const AdRequest(),
   listener: NativeAdListener(
     onAdLoaded: (ad) {
-      if (mounted) setState(() => _loaded = true);
+      if (mounted) {
+        setState(() => _loaded = true);
+        widget.onVisibilityChanged?.call(true);
+      }
     },
     onAdFailedToLoad: (ad, error) {
       ad.dispose();
@@ -40,6 +45,7 @@ _ad = NativeAd(
           _ad = null;
           _loaded = false;
         });
+        widget.onVisibilityChanged?.call(false);
       }
       debugPrint('Native ad ${widget.placement} failed: ${error.message}');
     },

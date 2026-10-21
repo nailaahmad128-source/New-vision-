@@ -45,13 +45,22 @@ class ToolsScreen extends StatelessWidget {
   );
 }
 
-class _Category extends StatelessWidget {
+class _Category extends StatefulWidget {
   final String title;
   final List<Widget> children;
-  const _Category({required this.title, required this.children});
+  const _Category({super.key, required this.title, required this.children});
+
+  @override
+  State<_Category> createState() => _CategoryState();
+}
+
+class _CategoryState extends State<_Category> {
+  final Set<String> _visibleAds = <String>{};
 
   @override
   Widget build(BuildContext context) {
+    final title = widget.title;
+    final children = widget.children;
     Widget toolsGrid(List<Widget> items) => LayoutBuilder(
       builder: (context, constraints) {
         const crossAxisCount = 3;
@@ -90,7 +99,23 @@ class _Category extends StatelessWidget {
 
     for (final child in children) {
       if (child is NativeAdTile) {
-        tools.add(child);
+        tools.add(
+          NativeAdTile(
+            key: ValueKey(child.placement),
+            placement: child.placement,
+            wide: false,
+            onVisibilityChanged: (visible) {
+              if (!mounted) return;
+              setState(() {
+                if (visible) {
+                  _visibleAds.add(child.placement);
+                } else {
+                  _visibleAds.remove(child.placement);
+                }
+              });
+            },
+          ),
+        );
       } else {
         tools.add(child);
       }
