@@ -90,13 +90,7 @@ class _Category extends StatelessWidget {
 
     for (final child in children) {
       if (child is NativeAdTile) {
-        flushTools();
-        sections.add(
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: 10),
-            child: child,
-          ),
-        );
+        tools.add(child);
       } else {
         tools.add(child);
       }
