@@ -55,7 +55,7 @@ class _Category extends StatefulWidget {
 }
 
 class _CategoryState extends State<_Category> {
-  final Set<String> _visibleAds = <String>{};
+  final Set<String> _failedAds = <String>{};
 
   @override
   Widget build(BuildContext context) {
@@ -99,6 +99,7 @@ class _CategoryState extends State<_Category> {
 
     for (final child in children) {
       if (child is NativeAdTile) {
+        if (_failedAds.contains(child.placement)) continue;
         tools.add(
           NativeAdTile(
             key: ValueKey(child.placement),
@@ -108,9 +109,9 @@ class _CategoryState extends State<_Category> {
               if (!mounted) return;
               setState(() {
                 if (visible) {
-                  _visibleAds.add(child.placement);
+                  _failedAds.remove(child.placement);
                 } else {
-                  _visibleAds.remove(child.placement);
+                  _failedAds.add(child.placement);
                 }
               });
             },
