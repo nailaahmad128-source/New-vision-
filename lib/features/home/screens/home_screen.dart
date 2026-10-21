@@ -175,8 +175,6 @@ class _PopularToolsGrid extends StatefulWidget {
 }
 
 class _PopularToolsGridState extends State<_PopularToolsGrid> {
-  final Set<String> _failedAds = <String>{};
-
   @override
   Widget build(BuildContext context) {
     final items = <Widget>[
@@ -186,26 +184,14 @@ class _PopularToolsGridState extends State<_PopularToolsGrid> {
       _ToolCard('Image to PDF', Icons.image_rounded, AppColors.toolImageToPdf, () => openTool(context, ToolId.imageToPdf)),
       _ToolCard('QR Generator', Icons.qr_code_2_rounded, AppColors.toolQrGen, () => openTool(context, ToolId.qrGenerate)),
       _ToolCard('PDF to Long Image', Icons.view_agenda_rounded, AppColors.toolPdfToImage, () => openTool(context, ToolId.pdfToLongImage)),
-      if (!_failedAds.contains('home_popular1'))
-        NativeAdTile(
-          key: const ValueKey('home_popular1'),
-          placement: 'home_popular1',
-          onVisibilityChanged: (loaded) {
-            if (!loaded && mounted && !_failedAds.contains('home_popular1')) {
-              setState(() => _failedAds.add('home_popular1'));
-            }
-          },
-        ),
-      if (!_failedAds.contains('home_popular2'))
-        NativeAdTile(
-          key: const ValueKey('home_popular2'),
-          placement: 'home_popular2',
-          onVisibilityChanged: (loaded) {
-            if (!loaded && mounted && !_failedAds.contains('home_popular2')) {
-              setState(() => _failedAds.add('home_popular2'));
-            }
-          },
-        ),
+      NativeAdTile(
+        key: const ValueKey('home_popular1'),
+        placement: 'home_popular1',
+      ),
+      NativeAdTile(
+        key: const ValueKey('home_popular2'),
+        placement: 'home_popular2',
+      ),
     ];
 
     return GridView.count(
