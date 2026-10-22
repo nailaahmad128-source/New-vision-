@@ -52,13 +52,18 @@ class HomeScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 18),
                   sliver: SliverToBoxAdapter(child: _QuickActions(context)),
                 ),
-                const SliverToBoxAdapter(child: SizedBox(height: 14)),
-                const SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: 18),
-                  sliver: SliverToBoxAdapter(child: NativeAdTile(wide: true, placement: 'home')),
+                const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 180,
+                      child: NativeAdTile(wide: true, placement: 'home'),
+                    ),
+                  ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(18, 24, 18, 8),
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
                   sliver: SliverToBoxAdapter(child: Text('Popular tools', style: theme.textTheme.titleLarge)),
                 ),
                 SliverPadding(
