@@ -9,6 +9,7 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'online_ocr_service.dart';
 
 class OcrCancelledException implements Exception {
@@ -285,16 +286,16 @@ class OcrService {
   }
 
   Future<int> _pdfPageCount(List<int> bytes) async {
-    var count = 0;
+    final document = PdfDocument(
+      inputBytes: Uint8List.fromList(bytes),
+    );
 
-    await for (final _ in Printing.raster(
-      Uint8List.fromList(bytes),
-      dpi: 36,
-    )) {
-      count++;
+    try {
+      final count = document.pages.count;
+      return count > 0 ? count : 1;
+    } finally {
+      document.dispose();
     }
-
-    return count == 0 ? 1 : count;
   }
 
   Future<String> _extractImage(

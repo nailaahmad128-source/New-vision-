@@ -69,9 +69,10 @@ class OnlineOcrService {
     try {
       final streamed = await _client
           .send(request)
-          .timeout(const Duration(seconds: 90));
+          .timeout(const Duration(seconds: 20));
 
-      final response = await http.Response.fromStream(streamed);
+      final response = await http.Response.fromStream(streamed)
+          .timeout(const Duration(seconds: 20));
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw OnlineOcrException(
