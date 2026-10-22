@@ -116,7 +116,7 @@ class _Header extends StatelessWidget {
   const _Header({required this.data});
   @override
   Widget build(BuildContext context) => Row(children: [
-    Container(width: 50, height: 50, decoration: BoxDecoration(color: AppColors.brandPrimary, borderRadius: BorderRadius.circular(16)), alignment: Alignment.center, child: const Text('SF', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w900))),
+    ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.asset('assets/images/scanflow_logo.png', width: 58, height: 58, fit: BoxFit.contain, errorBuilder: (_, __, ___) => Container(width: 58, height: 58, decoration: BoxDecoration(color: AppColors.brandPrimary, borderRadius: BorderRadius.circular(16)), alignment: Alignment.center, child: const Text('SF', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w900))))),
     const SizedBox(width: 12),
     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('ScanFlow', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)), Text('${data.documents.length} documents', style: Theme.of(context).textTheme.bodySmall)])),
     IconButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())), icon: const Icon(Icons.settings_outlined)),
