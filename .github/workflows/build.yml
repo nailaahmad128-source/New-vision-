@@ -90,6 +90,28 @@ jobs:
       - name: Build Release AAB
         run: flutter build appbundle --release
 
+      - name: Check 16 KB native library alignment
+        shell: bash
+        run: |
+          set -eu
+          AAB="build/app/outputs/bundle/release/app-release.aab"
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          OBJDUMP="$(find "$SDK/ndk" -path '*/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump' -type f 2>/dev/null | sort -V | tail -1)"
+          test -f "$AAB" || { echo "::error::AAB not found"; exit 1; }
+          test -n "$OBJDUMP" || { echo "::error::llvm-objdump not found"; exit 1; }
+          TMP="$(mktemp -d)"
+          trap 'rm -rf "$TMP"' EXIT
+          unzip -q "$AAB" '*/lib/*.so' -d "$TMP"
+          FOUND=0
+          while IFS= read -r -d '' LIB; do
+            FOUND=1
+            echo "===== $LIB ====="
+            "$OBJDUMP" -p "$LIB" | grep 'LOAD' || true
+          done < <(find "$TMP" -type f -name '*.so' -print0)
+          if [ "$FOUND" -eq 0 ]; then
+            echo "No native .so libraries found in AAB."
+          fi
+          echo "Alignment values above should be at least 0x4000 for 16 KB compatibility."
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
