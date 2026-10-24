@@ -76,7 +76,7 @@ try {
 await MobileAds.instance.initialize();
 _initialized = true;
 _preloadInterstitial();
-_preloadAppOpen();
+
 } catch (e) {
 debugPrint('AdsService init failed; continuing without ads: $e');
 _initialized = false;
@@ -132,6 +132,6 @@ await ad.show();
 
 void dispose() {
 _interstitial?.dispose();
-_appOpenAd?.dispose();
+
 }
 }
