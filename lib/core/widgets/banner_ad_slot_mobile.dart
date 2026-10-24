@@ -36,7 +36,7 @@ final banner = BannerAd(
     onAdFailedToLoad: (ad, error) {
       ad.dispose();
       if (mounted) setState(() => _loaded = false);
-      debugPrint('Banner ${widget.placement} failed: ${error.message}');
+      debugPrint('Banner ${widget.placement} failed: code=${error.code}, domain=${error.domain}, message=${error.message}');
     },
   ),
 );

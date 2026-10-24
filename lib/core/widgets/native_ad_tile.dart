@@ -47,7 +47,7 @@ _ad = NativeAd(
         });
         widget.onVisibilityChanged?.call(false);
       }
-      debugPrint('Native ad ${widget.placement} failed: ${error.message}');
+      debugPrint('Native ad ${widget.placement} failed: code=${error.code}, domain=${error.domain}, message=${error.message}');
     },
   ),
 )!..load();
