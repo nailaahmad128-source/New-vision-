@@ -15,6 +15,8 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  # Ready-made PDF editor UI for Fill & Sign
+  dart_pdf_editor: ^10.0.0
 
   # State management
   provider: ^6.1.2
