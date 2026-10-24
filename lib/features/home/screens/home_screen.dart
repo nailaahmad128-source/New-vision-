@@ -54,7 +54,7 @@ class HomeScreen extends StatelessWidget {
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 8)),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
                   sliver: SliverToBoxAdapter(
                     child: NativeAdTile(wide: true, placement: 'home'),
                   ),

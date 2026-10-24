@@ -63,10 +63,7 @@ super.dispose();
 @override
 Widget build(BuildContext context) {
 if (!_loaded || _ad == null) {
-  return SizedBox(
-    height: widget.wide ? 120 : 100,
-    width: double.infinity,
-  );
+  return const SizedBox.shrink();
 }
 return SizedBox(
 width: double.infinity,
