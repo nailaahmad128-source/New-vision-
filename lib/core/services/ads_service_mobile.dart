@@ -22,9 +22,6 @@ String.fromEnvironment('ADMOB_INTERSTITIAL_UNIT_ID', defaultValue: '');
 
 bool _initialized = false;
 InterstitialAd? _interstitial;
-AppOpenAd? _appOpenAd;
-bool _appOpenRequested = false;
-bool _appOpenShowing = false;
 DateTime? _lastInterstitialShown;
 int _actionsSinceLastInterstitial = 0;
 
@@ -84,51 +81,6 @@ _preloadAppOpen();
 debugPrint('AdsService init failed; continuing without ads: $e');
 _initialized = false;
 }
-}
-
-void _preloadAppOpen() {
-if (!_initialized || _appOpenAd != null) return;
-AppOpenAd.load(
-adUnitId: appOpenUnitId,
-request: const AdRequest(),
-adLoadCallback: AppOpenAdLoadCallback(
-onAdLoaded: (ad) {
-_appOpenAd = ad;
-if (_appOpenRequested) _showAppOpen();
-},
-onAdFailedToLoad: (error) {
-debugPrint('App Open load failed: ${error.message}');
-_appOpenAd = null;
-},
-),
-);
-}
-
-void requestAppOpenShow() {
-if (!_initialized || _appOpenShowing) return;
-_appOpenRequested = true;
-if (_appOpenAd != null) _showAppOpen();
-}
-
-void _showAppOpen() {
-final ad = _appOpenAd;
-if (ad == null || _appOpenShowing) return;
-_appOpenAd = null;
-_appOpenRequested = false;
-_appOpenShowing = true;
-ad.fullScreenContentCallback = FullScreenContentCallback<AppOpenAd>(
-onAdDismissedFullScreenContent: (ad) {
-_appOpenShowing = false;
-ad.dispose();
-_preloadAppOpen();
-},
-onAdFailedToShowFullScreenContent: (ad, error) {
-_appOpenShowing = false;
-ad.dispose();
-_preloadAppOpen();
-},
-);
-ad.show();
 }
 
 void _preloadInterstitial() {

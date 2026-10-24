@@ -31,7 +31,6 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<AdsService>().requestAppOpenShow();
       _checkScanFlowUpdate();
     });
   }
