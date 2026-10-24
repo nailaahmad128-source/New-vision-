@@ -62,10 +62,15 @@ super.dispose();
 
 @override
 Widget build(BuildContext context) {
-if (!_loaded || _ad == null) return const SizedBox.shrink();
+if (!_loaded || _ad == null) {
+  return SizedBox(
+    height: widget.wide ? 120 : 100,
+    width: double.infinity,
+  );
+}
 return SizedBox(
 width: double.infinity,
-height: double.infinity,
+height: widget.wide ? 120 : 100,
 child: ClipRRect(
 borderRadius: BorderRadius.circular(20),
 child: Container(color: Colors.white, child: AdWidget(ad: _ad!)),
