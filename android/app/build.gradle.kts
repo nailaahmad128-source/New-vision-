@@ -47,7 +47,7 @@ android {
         applicationId = "com.hameed.pdfmastertools"
         minSdk = 23
         targetSdk = 36
-        versionCode = flutterVersionCode.toInt()
+        versionCode = 19
         versionName = flutterVersionName
         multiDexEnabled = true
         // Google's public test AdMob App ID by default, so the app builds
@@ -103,6 +103,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.21.1")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
-    implementation("org.opencv:opencv:4.10.0")
+    implementation("org.opencv:opencv:4.12.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.3")
 }
