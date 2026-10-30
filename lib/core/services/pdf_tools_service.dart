@@ -462,35 +462,34 @@ class PdfToolsService {
   }
 
 
-Future<List<dynamic>?> _prepareImageForPdf(String path) async {
-  try {
-    final bytes = await File(path).readAsBytes();
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) return null;
+Future<List<dynamic>> _prepareImageForPdf(String path) async {
+  final file = File(path);
+  final bytes = await file.readAsBytes();
+  final decoded = img.decodeImage(bytes);
 
-    const maxWidth = 1800;
-
-    final resized = decoded.width > maxWidth
-        ? img.copyResize(
-            decoded,
-            width: maxWidth,
-            interpolation: img.Interpolation.average,
-          )
-        : decoded;
-
-    final jpg = img.encodeJpg(
-      resized,
-      quality: 88,
-    );
-
-    return <dynamic>[
-      Uint8List.fromList(jpg),
-      resized.width,
-      resized.height,
-    ];
-  } catch (_) {
-    return null;
+  if (decoded == null) {
+    throw FormatException('Unsupported or damaged image: ${file.uri.pathSegments.last}');
   }
+
+  const maxWidth = 1800;
+  final resized = decoded.width > maxWidth
+      ? img.copyResize(
+          decoded,
+          width: maxWidth,
+          interpolation: img.Interpolation.average,
+        )
+      : decoded;
+
+  final jpg = img.encodeJpg(resized, quality: 88);
+  if (jpg.isEmpty) {
+    throw FormatException('Could not convert image: ${file.uri.pathSegments.last}');
+  }
+
+  return <dynamic>[
+    Uint8List.fromList(jpg),
+    resized.width,
+    resized.height,
+  ];
 }
 
 
@@ -500,11 +499,21 @@ Future<List<dynamic>?> _prepareImageForPdf(String path) async {
     List<String> imagePaths, {
     required String outputName,
   }) async {
+    if (imagePaths.isEmpty) {
+      throw ArgumentError('Please select at least one image.');
+    }
+
     final pdfDoc = pw.Document();
+    var pagesCreated = 0;
 
     for (final path in imagePaths) {
-      final result = await compute(_prepareImageForPdf, path);
-      if (result == null) continue;
+      late final List<dynamic> result;
+      try {
+        result = await compute(_prepareImageForPdf, path);
+      } catch (e) {
+        final name = File(path).uri.pathSegments.last;
+        throw Exception('Could not add "$name" to PDF: $e');
+      }
 
       final jpg = result[0] as Uint8List;
       final width = result[1] as int;
@@ -540,6 +549,13 @@ Future<List<dynamic>?> _prepareImageForPdf(String path) async {
             ),
           ),
         ),
+      );
+      pagesCreated++;
+    }
+
+    if (pagesCreated != imagePaths.length) {
+      throw StateError(
+        'PDF page count mismatch: selected ${imagePaths.length}, created $pagesCreated.',
       );
     }
 

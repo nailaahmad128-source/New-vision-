@@ -22,9 +22,59 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
   bool _working = false;
 
   Future<void> _addImages() async {
-    final picked = await pickImagesFromGallery();
-    if (picked.isEmpty) return;
-    setState(() => _images.addAll(picked));
+    try {
+      final picked = await pickImagesFromGallery();
+      if (picked.isEmpty || !mounted) return;
+      setState(() => _images.addAll(picked));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open gallery: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _browseImages() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: true,
+        withData: false,
+      );
+      if (result == null || !mounted) return;
+
+      final paths = result.files
+          .map((file) => file.path)
+          .whereType<String>()
+          .where((path) => path.isNotEmpty)
+          .toList();
+
+      if (paths.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Selected images could not be accessed. Please try Gallery.'),
+          ),
+        );
+        return;
+      }
+
+      setState(() => _images.addAll(paths));
+
+      if (paths.length != result.files.length && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Some selected files could not be accessed and were not added.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not browse images: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _addFromCamera() async {
@@ -179,6 +229,12 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
                 subtitle: 'Choose photos',
                 icon: Icons.photo_library_rounded,
                 onTap: _addImages,
+              ),
+              ProfessionalAction(
+                title: 'Browse Files',
+                subtitle: 'Choose from folders',
+                icon: Icons.folder_open_rounded,
+                onTap: _browseImages,
               ),
               ProfessionalAction(
                 title: 'Camera',
