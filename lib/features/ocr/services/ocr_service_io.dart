@@ -43,14 +43,8 @@ class OcrService {
 
   bool _paddleDisabled = false;
 
-  static const String _builtInOnlineOcrApiKey = 'K88301512788957';
-
   OcrService({String? onlineApiKey}) {
-    final suppliedKey = onlineApiKey?.trim() ?? '';
-    final key = suppliedKey.isNotEmpty
-        ? suppliedKey
-        : _builtInOnlineOcrApiKey;
-
+    final key = onlineApiKey?.trim() ?? '';
     if (key.isNotEmpty) {
       _online = OnlineOcrService(apiKey: key);
     }
@@ -105,29 +99,21 @@ class OcrService {
         throw const OcrCancelledException();
       }
 
-      final onlineText = await _tryOnline(
-        path,
-        lang,
-      );
-
-      if (onlineText != null) {
-        onProgress?.call(1, 1);
-        return onlineText;
-      }
-
-      final paddleText = await _tryPaddle(
-        path,
-        lang,
-      );
-
+      final paddleText = await _tryPaddle(path, lang);
       if (paddleText != null) {
         onProgress?.call(1, 1);
         return paddleText;
       }
 
       final localText = await _extractImage(path, lang);
+      if (localText.trim().isNotEmpty) {
+        onProgress?.call(1, 1);
+        return localText;
+      }
+
+      final onlineText = await _tryOnline(path, lang);
       onProgress?.call(1, 1);
-      return localText;
+      return onlineText ?? '';
     }
 
     final pdfBytes = await File(path).readAsBytes();
@@ -139,7 +125,7 @@ class OcrService {
 
     await for (final page in Printing.raster(
       pdfBytes,
-      dpi: 300,
+      dpi: 240,
     )) {
       if (cancelToken?.isCancelled == true) {
         throw const OcrCancelledException();
@@ -160,18 +146,12 @@ class OcrService {
 
         index++;
 
-        String text = await _tryOnline(
-          file.path,
-          lang,
-        ) ??
-            await _tryPaddle(
-              file.path,
-              lang,
-            ) ??
-            await _extractImage(
-              file.path,
-              lang,
-            );
+        String text = await _tryPaddle(file.path, lang) ??
+            await _extractImage(file.path, lang);
+
+        if (text.trim().isEmpty) {
+          text = await _tryOnline(file.path, lang) ?? '';
+        }
 
         onProgress?.call(index, total);
 
@@ -352,33 +332,20 @@ class OcrService {
     try {
       final candidates = <String>[];
 
-      // For a single language, use two useful page layouts.
-      // This avoids the old 5-pass-per-language approach.
-      for (final code in requested) {
-        try {
-          final text = await _tesseractBest(
-            ocrPath,
-            [code],
-          );
-
-          if (text.trim().isNotEmpty) {
-            candidates.add(text.trim());
-          }
-        } catch (_) {}
+      final combined = await _tesseractBest(ocrPath, requested);
+      if (combined.trim().isNotEmpty) {
+        candidates.add(combined.trim());
       }
 
-      // Mixed-language OCR gets one combined pass as a fallback.
-      if (requested.length > 1) {
-        try {
-          final mixed = await _tesseractBest(
-            ocrPath,
-            requested,
-          );
-
-          if (mixed.trim().isNotEmpty) {
-            candidates.add(mixed.trim());
-          }
-        } catch (_) {}
+      if (requested.length > 1 && _qualityScore(combined) < 60) {
+        for (final code in requested) {
+          try {
+            final text = await _tesseractBest(ocrPath, [code]);
+            if (text.trim().isNotEmpty) {
+              candidates.add(text.trim());
+            }
+          } catch (_) {}
+        }
       }
 
       if (candidates.isEmpty) {
@@ -482,13 +449,7 @@ class OcrService {
     // PSM 6 is strong for ordinary scanned document pages.
     // PSM 11 is useful for sparse/irregular text.
     // For mixed languages, PSM 3 is also useful as a final fallback.
-    final List<String> psmModes;
-
-    if (languages.length > 1) {
-      psmModes = const ['6', '11', '3'];
-    } else {
-      psmModes = const ['6', '11'];
-    }
+    const psmModes = ['6', '11'];
 
     for (final psm in psmModes) {
       try {
@@ -506,6 +467,10 @@ class OcrService {
 
         if (cleaned.isNotEmpty) {
           results.add(cleaned);
+
+          if (_qualityScore(cleaned) >= 60) {
+            return cleaned;
+          }
         }
       } catch (_) {}
     }
