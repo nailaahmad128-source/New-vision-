@@ -44,7 +44,7 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
       );
       if (result == null || !mounted) return;
 
-      final paths = result.files
+      final paths = result
           .map((file) => file.path)
           .whereType<String>()
           .where((path) => path.isNotEmpty)
@@ -61,7 +61,7 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
 
       setState(() => _images.addAll(paths));
 
-      if (paths.length != result.files.length && mounted) {
+      if (paths.length != result.length && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Some selected files could not be accessed and were not added.'),
