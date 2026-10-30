@@ -37,7 +37,7 @@ class _ImageToPdfScreenState extends State<ImageToPdfScreen> {
 
   Future<void> _browseImages() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.image,
         allowMultiple: true,
         withData: false,
