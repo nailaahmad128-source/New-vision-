@@ -454,10 +454,28 @@ class LocalOfficeConverter implements ConversionProvider {
         continue;
       }
 
-      for (final line in lines) {
+      for (final pdfLine in page.lines) {
+        final line = _sanitizeDocxText(pdfLine.text.trim());
+        if (line.isEmpty) continue;
+
+        final heading = _looksLikeHeading(
+          line,
+          pdfLine.fontSize,
+          page.lines,
+        );
+
+        final bold = heading || _isBold(pdfLine.fontStyle);
+        final italic = _isItalic(pdfLine.fontStyle);
+        final fontSize = _safeFontSize(pdfLine.fontSize).round();
+
         body.write(
           _docxParagraph(
-            _docxRun(line),
+            _docxRun(
+              line,
+              bold: bold,
+              italic: italic,
+              fontSize: fontSize,
+            ),
             rtl: _containsRtl(line),
           ),
         );
@@ -1017,8 +1035,7 @@ class LocalOfficeConverter implements ConversionProvider {
         value.split(RegExp(r'\s+')).length <= 14;
 
     return shortEnough &&
-        (fontSize >= averageFont * 1.18 ||
-            value.length <= 55);
+        fontSize >= averageFont * 1.18;
   }
 
   bool _isBold(List<PdfFontStyle> styles) {
