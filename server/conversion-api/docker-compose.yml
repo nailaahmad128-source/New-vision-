@@ -1,0 +1,31 @@
+services:
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    restart: unless-stopped
+    command:
+      - gotenberg
+      - --api-timeout=180s
+      - --libreoffice-restart-after=100
+    expose:
+      - "3000"
+    networks:
+      - conversion-internal
+
+  conversion-api:
+    build: .
+    restart: unless-stopped
+    environment:
+      CONVERSION_API_TOKEN: ${CONVERSION_API_TOKEN:?Set token in .env}
+      GOTENBERG_URL: http://gotenberg:3000
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-30}
+      CONVERSION_TIMEOUT_SECONDS: ${CONVERSION_TIMEOUT_SECONDS:-180}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - gotenberg
+    networks:
+      - conversion-internal
+
+networks:
+  conversion-internal:
+    internal: true
