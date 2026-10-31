@@ -601,6 +601,18 @@ class LocalOfficeConverter implements ConversionProvider {
       return false;
     }
 
+    final heights = usable
+        .map((line) => line.bounds.height)
+        .where((height) => height > 0)
+        .toList()
+      ..sort();
+
+    final tolerance = heights.isEmpty
+        ? 12.0
+        : (heights[heights.length ~/ 2] * 1.25)
+            .clamp(8.0, 20.0)
+            .toDouble();
+
     // A real table normally has repeated vertical starting positions.
     final xPositions = <double>[];
 
@@ -620,7 +632,7 @@ class LocalOfficeConverter implements ConversionProvider {
 
     for (final x in xPositions) {
       if (clusters.isEmpty ||
-          (x - clusters.last).abs() > 16) {
+          (x - clusters.last).abs() > tolerance) {
         clusters.add(x);
       }
     }
@@ -637,7 +649,7 @@ class LocalOfficeConverter implements ConversionProvider {
       for (final line in usable) {
         if (line.wordCollection.any(
           (word) =>
-              (word.bounds.left - columnX).abs() <= 16,
+              (word.bounds.left - columnX).abs() <= tolerance,
         )) {
           lineCount++;
         }
@@ -666,6 +678,18 @@ class LocalOfficeConverter implements ConversionProvider {
     if (usable.isEmpty) {
       return const [];
     }
+
+    final heights = usable
+        .map((line) => line.bounds.height)
+        .where((height) => height > 0)
+        .toList()
+      ..sort();
+
+    final tolerance = heights.isEmpty
+        ? 12.0
+        : (heights[heights.length ~/ 2] * 1.25)
+            .clamp(8.0, 20.0)
+            .toDouble();
 
     // First group nearby PDF lines into visual rows using Y position.
     final visualRows = <List<TextWord>>[];
@@ -722,7 +746,7 @@ class LocalOfficeConverter implements ConversionProvider {
 
     for (final x in positions) {
       if (columns.isEmpty ||
-          (x - columns.last).abs() > 16) {
+          (x - columns.last).abs() > tolerance) {
         columns.add(x);
       }
     }
